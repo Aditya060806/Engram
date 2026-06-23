@@ -1,0 +1,12 @@
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store
+
+# Env / secrets
+.env
+.env.*
+!.env.example
+
+# Vercel
+.vercel
