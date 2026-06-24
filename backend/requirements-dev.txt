@@ -1,0 +1,5 @@
+black==26.5.1
+isort==8.0.1
+datamodel-code-generator==0.65.0
+jupyter_core==5.9.1
+nbformat==5.10.4
