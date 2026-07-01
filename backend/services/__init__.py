@@ -41,7 +41,6 @@ import trafilatura
 from youtube_transcript_api import YouTubeTranscriptApi
 from datetime import datetime, timezone, timedelta
 from collections import OrderedDict
-import asyncio
 import sys
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 
@@ -50,7 +49,7 @@ from context import set_current_user, get_current_user, _cache_key as _ctx_cache
 _cache_key = _ctx_cache_key
 
 # Load only non-secret config from .env
-from dotenv import load_dotenv
+from dotenv import load_dotenv  # noqa: E402
 load_dotenv()
 
 from database import (  # noqa: E402
