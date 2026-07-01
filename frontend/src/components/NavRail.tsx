@@ -227,7 +227,7 @@ export default function NavRail() {
   );
 }
 
-/* ── SVG Icons — clean, editorial line style ── */
+/* ── SVG Icons, clean, editorial line style ── */
 
 function ProvenanceIcon() {
   return (

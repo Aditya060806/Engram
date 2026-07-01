@@ -119,7 +119,7 @@ export default function ResolvePage() {
             <h1 className="display-lg text-ink">What changed?</h1>
             <p className="mt-2 text-base text-body leading-relaxed max-w-xl" style={{ letterSpacing: "0.15px" }}>
               New evidence collided with what you already knew. Engram caught it before it
-              poisoned your memory — you make the final call.
+              poisoned your memory, you make the final call.
             </p>
           </div>
           {pendingCount > 0 && (
@@ -147,7 +147,7 @@ export default function ResolvePage() {
                   <path d="M8 4.5v4m0 2.5h.01" stroke="#e0a328" strokeWidth="2" strokeLinecap="round" />
                 </svg>
                 <span className="text-[15px] font-semibold text-ink tracking-tight">
-                  Contradiction — &ldquo;{conflict.topic}&rdquo;
+                  Contradiction: &ldquo;{conflict.topic}&rdquo;
                 </span>
               </div>
 

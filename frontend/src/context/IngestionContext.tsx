@@ -60,7 +60,7 @@ export function IngestionProvider({ children }: { children: React.ReactNode }) {
         }
       } catch {
         failCountRef.current += 1;
-        // Job not found (stale localStorage from previous session) or too many failures — give up
+        // Job not found (stale localStorage from previous session) or too many failures, give up
         if (failCountRef.current >= MAX_FAILURES) {
           setJobStatus("idle");
           setError(null);
@@ -86,13 +86,13 @@ export function IngestionProvider({ children }: { children: React.ReactNode }) {
           setProgress(0);
           startPolling(savedJobId);
         } else {
-          // Job already finished while we were away — adopt its terminal state
+          // Job already finished while we were away, adopt its terminal state
           setJobStatus(job.status);
           setProgress(job.status === "completed" ? 100 : job.progress);
           localStorage.setItem("active_ingestion_job_status", job.status);
         }
       }).catch(() => {
-        // Stale entry from a previous server lifetime — clean up
+        // Stale entry from a previous server lifetime, clean up
         localStorage.removeItem("active_ingestion_job_id");
         localStorage.removeItem("active_ingestion_job_status");
       });

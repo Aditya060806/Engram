@@ -17,8 +17,8 @@ const garamond = EB_Garamond({
 
 export const metadata: Metadata = {
   metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL || "https://engram1002.vercel.app"),
-  title: "Engram — A memory that knows when to update itself",
-  description: "A self-organizing personal knowledge graph that ingests everything you read, write, and build — and actively maintains itself.",
+  title: "Engram: A memory that knows when to update itself",
+  description: "A self-organizing personal knowledge graph that ingests everything you read, write, and build, and actively maintains itself.",
   manifest: "/site.webmanifest",
   icons: {
     icon: [
@@ -30,7 +30,7 @@ export const metadata: Metadata = {
     apple: "/apple-touch-icon.png?v=4",
   },
   openGraph: {
-    title: "Engram — A memory that knows when to update itself",
+    title: "Engram: A memory that knows when to update itself",
     description: "A self-organizing personal knowledge graph built on Cognee's memory lifecycle.",
     url: process.env.NEXT_PUBLIC_APP_URL || "https://engram1002.vercel.app",
     siteName: "Engram",
@@ -46,7 +46,7 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "Engram — A memory that knows when to update itself",
+    title: "Engram: A memory that knows when to update itself",
     description: "A self-organizing personal knowledge graph built on Cognee's memory lifecycle.",
     images: ["/images/og-image.png"],
   },

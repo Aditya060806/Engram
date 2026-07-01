@@ -428,7 +428,7 @@ export default function AskPage() {
             <EmptyState
               icon="chat"
               title="What did you forget?"
-              description="Ask anything you've fed into Engram. It recalls across every session, reconciles the timeline, and tells you what changed — not just what you first believed."
+              description="Ask anything you've fed into Engram. It recalls across every session, reconciles the timeline, and tells you what changed, not just what you first believed."
             />
             <div className="flex flex-wrap gap-2.5 justify-center max-w-xl">
               {promptChips.map((chip) => (

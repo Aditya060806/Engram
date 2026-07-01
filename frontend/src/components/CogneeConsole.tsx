@@ -112,7 +112,7 @@ export default function CogneeConsole() {
       {/* Console Body */}
       <div className="flex-1 overflow-y-auto scrollbar-thin p-3 space-y-2 bg-stone-950 font-mono text-[10px] leading-normal select-text">
         {logs.length === 0 ? (
-          <div className="text-stone-500 italic p-2">Waiting for memory activity — ingest a source to watch remember(), cognify(), and memify() fire live.</div>
+          <div className="text-stone-500 italic p-2">Waiting for memory activity, ingest a source to watch remember(), cognify(), and memify() fire live.</div>
         ) : (
           logs.map((log, i) => (
             <div key={i} className="flex items-start gap-2 border-b border-stone-900/50 pb-1.5 last:border-0 last:pb-0">

@@ -163,7 +163,7 @@ export default function LoginPage() {
           By continuing, Engram will access your{" "}
           <span
             className="border-b border-dotted border-[var(--color-hairline-strong)] cursor-help"
-            title="Your name, email, and avatar URL — standard OAuth scopes, nothing more."
+            title="Your name, email, and avatar URL, standard OAuth scopes, nothing more."
           >
             profile info
           </span>{" "}

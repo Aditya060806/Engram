@@ -395,7 +395,7 @@ export default function SettingsPage() {
               <div className="flex-1">
                 <h3 className="text-sm font-semibold text-body-strong">Schema Inventory</h3>
                 <p className="text-xs text-muted-soft mt-1 leading-relaxed max-w-lg">
-                  See the shape of your knowledge graph — how many entities of each type exist, with sample names and relationship counts.
+                  See the shape of your knowledge graph, how many entities of each type exist, with sample names and relationship counts.
                 </p>
                 {schemaInventory && (
                   <div className="mt-4 space-y-2.5" data-stagger>
@@ -445,7 +445,7 @@ export default function SettingsPage() {
               <div className="flex-1">
                 <h3 className="text-sm font-semibold text-body-strong">Session Guidance</h3>
                 <p className="text-xs text-muted-soft mt-1 leading-relaxed max-w-lg">
-                  Distill accumulated learnings from your chat sessions — what Engram has learned about how you like answers structured.
+                  Distill accumulated learnings from your chat sessions, what Engram has learned about how you like answers structured.
                 </p>
                 {guidance && (
                   <div className="mt-4 space-y-2">

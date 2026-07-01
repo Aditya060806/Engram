@@ -155,7 +155,7 @@ export default function AIConfigModal() {
         <div className="flex items-center justify-between mb-6 pb-4 border-b border-hairline-soft">
           <div>
             <h3 className="text-lg font-semibold text-ink">Bring your own AI</h3>
-            <p className="text-xs text-muted mt-0.5">Powers recall, ingestion reconciliation, and your daily Recap — with your key, encrypted locally.</p>
+            <p className="text-xs text-muted mt-0.5">Powers recall, ingestion reconciliation, and your daily Recap, with your key, encrypted locally.</p>
           </div>
           <button
             onClick={closeModal}

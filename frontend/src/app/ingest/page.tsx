@@ -121,7 +121,7 @@ export default function IngestPage() {
           <h1 className="display-lg text-ink">Give it something to remember</h1>
           <p className="mt-2 text-base text-body leading-relaxed max-w-xl" style={{ letterSpacing: "0.15px" }}>
             Point Engram at a repo, PDF, article, video, or chat export. It extracts the meaning,
-            checks it against what you already know, and weaves it into your graph — permanently.
+            checks it against what you already know, and weaves it into your graph, permanently.
           </p>
         </div>
 
@@ -292,7 +292,7 @@ export default function IngestPage() {
                   : "bg-primary text-on-primary hover:bg-primary-active active:scale-[0.98]"
               }`}
             >
-              {jobStatus === "idle" ? "Sync Now" : jobStatus === "running" ? `Syncing… (${progress}%)` : "Done — Sync Another"}
+              {jobStatus === "idle" ? "Sync Now" : jobStatus === "running" ? `Syncing… (${progress}%)` : "Done, Sync Another"}
             </button>
             {(apiError || error) && <span className="text-sm text-semantic-error font-medium">{apiError || error}</span>}
           </div>
