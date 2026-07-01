@@ -385,8 +385,8 @@ export default function LandingPage() {
                 ))}
                 <span className="hl-underline">
                   {HEAD_ACCENT.map((w, i) => (
-                    <span key={w} className="hl-word text-mono-shine" style={{ "--i": HEAD_LINE_1.length + HEAD_LINE_2.length + i } as React.CSSProperties}>
-                      {w}{i === 0 ? "\u00A0" : ""}
+                    <span key={w} className="hl-word" style={{ "--i": HEAD_LINE_1.length + HEAD_LINE_2.length + i } as React.CSSProperties}>
+                      <span className="text-mono-shine">{w}{i === 0 ? "\u00A0" : ""}</span>
                     </span>
                   ))}
                 </span>
