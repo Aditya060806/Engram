@@ -362,6 +362,12 @@ def db_get_user_ai_config() -> Optional[dict]:
         decrypted = decrypt_key(row["api_key_encrypted"])
     except Exception:
         decrypted = ""
+    # Self-heal: a row that no longer decrypts (e.g. ENGRAM_ENCRYPTION_KEY was
+    # rotated) is unusable. Drop it and report no config so callers fall back to
+    # env keys and startup can re-seed a fresh, correctly-encrypted config.
+    if not decrypted:
+        db_delete_user_ai_config()
+        return None
     return {
         "provider": row["provider"],
         "api_key": decrypted,
