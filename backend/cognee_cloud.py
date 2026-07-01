@@ -32,7 +32,10 @@ class CogneeCloudClient:
 
     async def _request(self, method: str, path: str, **kwargs) -> Any:
         url = f"{self.base_url}{path}"
-        async with httpx.AsyncClient(timeout=self._timeout) as client:
+        # Cap the connect phase so a flaky/unreachable tenant fails fast (and the
+        # caller falls back to local memory) instead of hanging for the full read timeout.
+        timeout = httpx.Timeout(self._timeout, connect=10.0)
+        async with httpx.AsyncClient(timeout=timeout) as client:
             resp = await client.request(method, url, headers=self._headers, **kwargs)
             resp.raise_for_status()
             ctype = resp.headers.get("content-type", "")

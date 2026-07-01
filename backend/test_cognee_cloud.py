@@ -79,7 +79,11 @@ async def main():
         if texts:
             ok("recall() — got an answer from the graph")
             for t in texts[:3]:
-                print(f"        ↳ {t[:160]}")
+                line = f"        -> {t[:160]}"
+                try:
+                    print(line)
+                except UnicodeEncodeError:
+                    print(line.encode("ascii", "replace").decode("ascii"))
         else:
             fail("recall() returned no text (graph may still be building — retry in ~30s)")
     except Exception as e:

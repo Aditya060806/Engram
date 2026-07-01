@@ -1272,20 +1272,42 @@ async def answer_query(req: RecallRequest) -> ChatMessage:
                 f"  Status: {c.status} ({c.relationship})"
             )
 
-    # Enrich with Cognee recall results from the actual graph
+    # ── PRIMARY answer path: the hosted Cognee Cloud graph completion ──
+    # This is a Cognee-first project: recall() answers straight from the graph.
+    # The LLM providers (Groq / Gemini) are only used as a fallback below.
+    answer = ""
+    answered_by_cognee = False
+
     if cognee_cloud_active():
         from cognee_cloud import get_cloud_client
         client = get_cloud_client()
         if client:
+            # 1) Ask Cognee to complete an answer over the knowledge graph (primary).
             try:
-                texts = await client.recall(req.query, get_cognee_dataset(), top_k=5, only_context=True)
-                if texts:
-                    log_cognee_activity("recall()", f"[Cloud] Recalled context for '{req.query[:45]}...'")
-                    graph_ctx_lines.append("\n[Cognee Cloud Recall:]")
-                    for t in texts:
-                        graph_ctx_lines.append(f"- {t[:300]}")
+                completions = await client.recall(
+                    req.query, get_cognee_dataset(), top_k=5,
+                    only_context=False, search_type="GRAPH_COMPLETION",
+                )
+                cognee_answer = " ".join(t.strip() for t in completions if t and t.strip()).strip() if completions else ""
+                refusal_markers = ["no context", "no information", "i don't know", "cannot answer", "not enough information"]
+                if cognee_answer and len(cognee_answer) > 2 and not any(m in cognee_answer.lower() for m in refusal_markers):
+                    answer = cognee_answer
+                    answered_by_cognee = True
+                    log_cognee_activity("recall()", f"[Cloud] Answered '{req.query[:45]}...' via graph completion")
             except Exception as cloud_err:
-                print(f"[Cognee Cloud] recall failed ({cloud_err})", flush=True)
+                print(f"[Cognee Cloud] graph completion failed ({cloud_err})", flush=True)
+
+            # 2) If Cognee did not answer, pull raw context to ground the LLM fallback.
+            if not answered_by_cognee:
+                try:
+                    texts = await client.recall(req.query, get_cognee_dataset(), top_k=5, only_context=True)
+                    if texts:
+                        log_cognee_activity("recall()", f"[Cloud] Recalled context for '{req.query[:45]}...'")
+                        graph_ctx_lines.append("\n[Cognee Cloud Recall:]")
+                        for t in texts:
+                            graph_ctx_lines.append(f"- {t[:300]}")
+                except Exception as cloud_err:
+                    print(f"[Cognee Cloud] recall failed ({cloud_err})", flush=True)
     elif COGNEE_READY:
         apply_cognee_llm_config()
         try:
@@ -1302,42 +1324,43 @@ async def answer_query(req: RecallRequest) -> ChatMessage:
         except Exception as cognee_err:
             print(f"[Cognee] recall failed: {cognee_err}", flush=True)
 
-    # Try LLM answer; fall back to keyword answer if LLM unavailable
-    if HAS_LLM:
-        sys_prompt = (
-            "You are Engram, an AI knowledge-graph assistant. "
-            "You have access to the user's knowledge graph context below. "
-            "When the user asks about their knowledge, sources, or project details, "
-            "answer based on the provided knowledge graph context. Be specific — "
-            "quote or paraphrase actual content. "
-            "When the user sends a greeting, general chat, or asks something unrelated "
-            "to the knowledge graph, respond naturally and conversationally. "
-            "You are a helpful assistant that can do both — you don't need to force "
-            "every answer to come from the knowledge graph."
-        )
-        user_prompt = (
-            f"The following is the user's knowledge graph context:\n"
-            f"{chr(10).join(graph_ctx_lines)}\n\n"
-            f"User message: {req.query}"
-        )
-        llm_answer = await call_llm(user_prompt, system_prompt=sys_prompt)
-    else:
-        llm_answer = ""
-
-    if not llm_answer:
-        if not db_sources:
-            answer = "I don't have any sources ingested yet. Please add a source under 'Add Memory' to ask questions about your knowledge graph."
+    # ── FALLBACK path: local LLM (Groq / Gemini), grounded on the graph context ──
+    if not answered_by_cognee:
+        if HAS_LLM:
+            sys_prompt = (
+                "You are Engram, an AI knowledge-graph assistant. "
+                "You have access to the user's knowledge graph context below. "
+                "When the user asks about their knowledge, sources, or project details, "
+                "answer based on the provided knowledge graph context. Be specific: "
+                "quote or paraphrase actual content. "
+                "When the user sends a greeting, general chat, or asks something unrelated "
+                "to the knowledge graph, respond naturally and conversationally. "
+                "You are a helpful assistant that can do both, you do not need to force "
+                "every answer to come from the knowledge graph."
+            )
+            user_prompt = (
+                f"The following is the user's knowledge graph context:\n"
+                f"{chr(10).join(graph_ctx_lines)}\n\n"
+                f"User message: {req.query}"
+            )
+            llm_answer = await call_llm(user_prompt, system_prompt=sys_prompt)
         else:
-            source_labels = ", ".join(f"'{s.label}'" for s in db_sources)
-            answer = f"I've searched your active sources ({source_labels}) but couldn't find specific information to answer your question. Could you rephrase it or check the source content?"
-    else:
-        answer = llm_answer
+            llm_answer = ""
+
+        if not llm_answer:
+            if not db_sources:
+                answer = "I don't have any sources ingested yet. Please add a source under 'Add Memory' to ask questions about your knowledge graph."
+            else:
+                source_labels = ", ".join(f"'{s.label}'" for s in db_sources)
+                answer = f"I've searched your active sources ({source_labels}) but couldn't find specific information to answer your question. Could you rephrase it or check the source content?"
+        else:
+            answer = llm_answer
 
     # If the LLM returned "don't know" but we have relevant data in context, build answer directly
     # We only override the LLM response if it is a short refusal (e.g., under 180 characters).
     # If the LLM actually wrote a detailed explanation but included a caveat, we keep its conversational answer.
     ignorance_phrases = ["don't have", "no information", "no context", "couldn't find", "not mentioned", "not enough", "don't know", "cannot determine", "doesn't contain"]
-    is_refusal = len(answer.strip()) < 180 and any(p in answer.lower() for p in ignorance_phrases)
+    is_refusal = (not answered_by_cognee) and len(answer.strip()) < 180 and any(p in answer.lower() for p in ignorance_phrases)
     if is_refusal:
         query_terms = extract_query_terms(req.query)
         matched_topic = get_matched_topic(req.query, db_get_distinct_topics())
@@ -1504,13 +1527,16 @@ async def answer_query(req: RecallRequest) -> ChatMessage:
         entries = await get_session_history(session_id="default_session", last_n=1)
         if entries:
             qa_id_val = entries[0].get("qa_id")
-        # Read current provider/model from config
-        config = db_get_user_ai_config()
-        if config:
-            provider_val = config.get("provider")
-            model_val = config.get("model", "").split("/")[-1] or config.get("model")
+        # Attribute the answer: Cognee when it answered from the graph, otherwise the fallback LLM.
+        if answered_by_cognee:
+            provider_val = "cognee"
+            model_val = "graph-completion"
         else:
-            if GEMINI_API_KEY:
+            config = db_get_user_ai_config()
+            if config:
+                provider_val = config.get("provider")
+                model_val = config.get("model", "").split("/")[-1] or config.get("model")
+            elif GEMINI_API_KEY:
                 provider_val = "gemini"
                 model_val = GEMINI_MODEL
             elif GROQ_API_KEY:
@@ -2417,16 +2443,27 @@ async def connect_cognee_cloud() -> bool:
     if client is None:
         return False
 
-    try:
-        await client.health()
-        COGNEE_CLOUD_CONNECTED = True
-        log_cognee_activity("serve()", "Connected to Cognee Cloud — remember/recall/forget route to the hosted tenant")
-        print(f"[Cognee] Connected to Cognee Cloud tenant at {os.environ.get('COGNEE_SERVICE_URL')}.", flush=True)
-        return True
-    except Exception as e:
-        print(f"[Cognee] Cloud health check failed ({e}); continuing with local memory.", flush=True)
-        return False
+    # Retry the health check a few times so a transient DNS blip at startup
+    # does not disable the tenant for the whole session.
+    last_err: Optional[Exception] = None
+    for attempt in range(3):
+        try:
+            await client.health()
+            COGNEE_CLOUD_CONNECTED = True
+            log_cognee_activity("serve()", "Connected to Cognee Cloud — remember/recall/forget route to the hosted tenant")
+            print(f"[Cognee] Connected to Cognee Cloud tenant at {os.environ.get('COGNEE_SERVICE_URL')}.", flush=True)
+            return True
+        except Exception as e:
+            last_err = e
+            if attempt < 2:
+                await asyncio.sleep(1.5)
+    print(f"[Cognee] Cloud health check failed ({last_err}); credentials are set, so recall/ingest will still try the tenant per-request with local fallback.", flush=True)
+    return False
 
 
 def cognee_cloud_active() -> bool:
-    return COGNEE_CLOUD_CONNECTED
+    # Cognee-first: route to the hosted tenant whenever credentials are configured.
+    # Every cloud call is wrapped in try/except with a local fallback, so a flaky
+    # startup health check never permanently forces answers onto the fallback LLM.
+    from cognee_cloud import cloud_enabled
+    return cloud_enabled()
