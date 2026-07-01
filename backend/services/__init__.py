@@ -1918,6 +1918,11 @@ async def get_session_guidance(session_id: str = "default_session") -> dict:
     # so distillation would 422. Skip quietly until there is something to distill.
     if not db_get_sources():
         return {"session_id": session_id, "status": "empty", "documents": []}
+    # Session distillation uses the local SDK session store. When routed to a hosted
+    # Cognee Cloud tenant, dataset ownership differs under multi-tenant access control,
+    # so the call 422s on every poll. Skip quietly rather than spam errors.
+    if cognee_cloud_active():
+        return {"session_id": session_id, "status": "empty", "documents": []}
     apply_cognee_llm_config()
     try:
         result = await cognee.session.distill_session(
