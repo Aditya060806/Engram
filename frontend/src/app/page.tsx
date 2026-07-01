@@ -272,12 +272,12 @@ export default function LandingPage() {
         <div aria-hidden className="ambient-orb pointer-events-none absolute top-10 right-[4%] w-[320px] sm:w-[420px] h-[320px] sm:h-[420px] rounded-full blur-[100px] opacity-[0.04] bg-ink" style={{ animationDelay: "3s" }} />
         <div className="relative max-w-[1180px] mx-auto">
           <div className="max-w-3xl mx-auto text-center">
-            <div className="flex justify-center" data-reveal-scale>
+            <Reveal className="flex justify-center">
               <span className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full border border-hairline bg-surface-card/60 backdrop-blur-sm caption-upper text-muted">
                 <span className="relative flex h-1.5 w-1.5"><span className="absolute inline-flex h-full w-full rounded-full bg-ink opacity-60 animate-ping" /><span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-ink" /></span>
                 Built on the Cognee memory lifecycle
               </span>
-            </div>
+            </Reveal>
             <h1 className="display-mega mt-6 sm:mt-7 leading-[1.03]">
               <span className="block">{HEAD_LINE_1.map((w, i) => (<span key={w} className="hl-word" style={{ "--i": i } as React.CSSProperties}>{w}&nbsp;</span>))}</span>
               <span className="block">
@@ -300,9 +300,11 @@ export default function LandingPage() {
               </div>
             </Reveal>
           </div>
-          <div data-reveal-scale className="mt-14 sm:mt-20 max-w-4xl mx-auto float-y">
-            <AppFrame url={`${BASE_URL.replace(/^https?:\/\//, "")}/resolve`}><ReconciliationDemo /></AppFrame>
-          </div>
+          <Reveal delay={400} className="mt-12 sm:mt-16 max-w-4xl mx-auto">
+            <div className="float-y">
+              <AppFrame url={`${BASE_URL.replace(/^https?:\/\//, "")}/resolve`}><ReconciliationDemo /></AppFrame>
+            </div>
+          </Reveal>
         </div>
       </section>
 
