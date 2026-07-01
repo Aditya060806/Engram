@@ -4,267 +4,120 @@ import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { useTheme } from "@/components/ThemeProvider";
-import { useSession } from "next-auth/react";
-import gsap from "gsap";
-import { useGSAP } from "@gsap/react";
+import { useSession, signOut } from "next-auth/react";
 import Lenis from "lenis";
 import Reveal from "@/components/Reveal";
+import CountUp from "@/components/CountUp";
 
-gsap.registerPlugin(useGSAP);
+const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || "https://engram1002.vercel.app";
 
-const REPO_URL = "https://github.com/Aditya060806/Engram";
-const ACCENT = "linear-gradient(120deg, var(--color-gradient-lavender), var(--color-gradient-sky))";
-
-/* ── Small building blocks ─────────────────────────────────────── */
-
-const GradientText = ({ children }: { children: React.ReactNode }) => (
-  <span
-    style={{ backgroundImage: ACCENT, WebkitBackgroundClip: "text", backgroundClip: "text", color: "transparent" }}
-  >
-    {children}
-  </span>
-);
-
-const Kicker = ({ children }: { children: React.ReactNode }) => (
-  <div className="inline-flex items-center gap-2 mb-5">
-    <span className="h-px w-6" style={{ background: ACCENT }} />
-    <span className="caption-upper text-[var(--color-muted)]">{children}</span>
-  </div>
-);
-
-/* ── Data ──────────────────────────────────────────────────────── */
-
-const LIFECYCLE = [
+/* ── The four Cognee lifecycle operations ── */
+const MEMORY_OPS: { name: string; alias?: string; tint: string; desc: string; icon: React.ReactNode }[] = [
   {
-    n: "01",
-    op: "remember()",
-    title: "Ingest & structure",
-    body: "Point Engram at a repo, PDF, article, video, or chat export. Cognee compiles it into a graph of entities and relationships — not just another pile of embeddings.",
+    name: "remember",
+    tint: "var(--color-gradient-lavender)",
+    desc: "Ingest repos, PDFs, articles, chat exports and transcripts — structured into one graph.",
+    icon: (
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M12 5a3 3 0 0 0-3 3 3 3 0 0 0-1 5.8V16a2 2 0 0 0 4 0" />
+        <path d="M12 5a3 3 0 0 1 3 3 3 3 0 0 1 1 5.8V16a2 2 0 0 1-4 0" />
+      </svg>
+    ),
   },
   {
-    n: "02",
-    op: "recall()",
-    title: "Ask across time",
-    body: "Query in plain language. Engram routes between semantic search and deep graph traversal, then tells you what changed — not only what you first believed.",
+    name: "recall",
+    tint: "var(--color-gradient-sky)",
+    desc: "Ask in plain language. Cognee routes between semantic search and deep graph traversal.",
+    icon: (
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="11" cy="11" r="7" />
+        <path d="m21 21-4.3-4.3" />
+      </svg>
+    ),
   },
   {
-    n: "03",
-    op: "improve()",
-    title: "Reconcile & reinforce",
-    body: "Fresh evidence is checked against what you already know. Contradictions surface instantly, and your decisions reinforce the facts that win.",
+    name: "improve",
+    alias: "memify",
+    tint: "var(--color-gradient-mint)",
+    desc: "Re-enrich the graph, reinforce confirmed facts, and adapt weights from your feedback.",
+    icon: (
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M3 12a9 9 0 0 1 15-6.7L21 8" />
+        <path d="M21 3v5h-5" />
+        <path d="M21 12a9 9 0 0 1-15 6.7L3 16" />
+        <path d="M3 21v-5h5" />
+      </svg>
+    ),
   },
   {
-    n: "04",
-    op: "forget()",
-    title: "Decay & prune",
-    body: "Unreinforced facts lose confidence over time. Once they slip below the line, Engram forgets them — so what you recall stays sharp.",
-  },
-];
-
-const FEATURES = [
-  {
-    title: "Reconciliation engine",
-    body: "Every new belief is validated against your graph in under two seconds using schema-level contradiction checks.",
-    span: "lg",
-  },
-  {
-    title: "Time-aware decay",
-    body: "Confidence scores fall continuously and stale nodes are pruned once they cross the threshold.",
-    span: "sm",
-  },
-  {
-    title: "3D knowledge graph",
-    body: "A force-directed WebGL view of thousands of nodes with live provenance tracing and direct editing.",
-    span: "sm",
-  },
-  {
-    title: "Bring your own key",
-    body: "Connect Groq, Gemini, or OpenAI. Keys are encrypted at rest and never touch the client.",
-    span: "sm",
-  },
-  {
-    title: "Five native sources",
-    body: "GitHub repos, PDFs, ChatGPT and Claude exports, web articles, and YouTube transcripts — ingested natively.",
-    span: "sm",
-  },
-  {
-    title: "The Recap",
-    body: "A morning-after digest of everything your memory learned, reconciled, and forgot while you were away.",
-    span: "lg",
+    name: "forget",
+    tint: "var(--color-gradient-rose)",
+    desc: "Decay unreinforced nodes over time and prune what no longer deserves to be remembered.",
+    icon: (
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M3 6h18" />
+        <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+        <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+      </svg>
+    ),
   },
 ];
 
-const FAQS = [
+const faqs = [
   {
-    q: "How is this different from plain RAG?",
-    a: "RAG leans on static embeddings and happily returns stale matches. Engram compiles context into a deterministic graph and runs contradiction checks at ingestion, so conflicting facts get caught before they ever reach recall.",
+    q: "Is this just RAG with extra steps?",
+    a: "No. Similarity-based RAG relies on static embeddings and happily retrieves stale facts. Engram uses Cognee to compile context into a deterministic graph and runs schema checks at ingestion to catch factual contradictions before they enter long-term memory.",
   },
   {
-    q: "What happens to a fact once it's contradicted?",
-    a: "It's deactivated, its confidence drops to zero, and the decision is logged. You can replay the timeline to see exactly what changed and when.",
+    q: "What happens to a belief when it's superseded?",
+    a: "The older belief is deactivated and its confidence drops toward zero. Every reconciliation decision is logged, so you can run temporal diffs like 'what changed since last week' at any time.",
   },
   {
-    q: "Which sources can I feed it?",
-    a: "Five out of the box: GitHub repositories, PDFs, ChatGPT and Claude exports, web articles, and YouTube transcripts.",
+    q: "Which sources can I ingest?",
+    a: "GitHub repositories, local PDFs, ChatGPT and Claude conversation exports, web articles, and YouTube transcripts — plus your own chat turns as you use the app.",
   },
   {
-    q: "Where does my data actually go?",
-    a: "Only prompts reach your chosen LLM provider. Everything else — metadata, reconciliation logs, access rules — stays in your own database, and keys are encrypted at rest.",
+    q: "Where does my data go?",
+    a: "Only to the LLM provider you configure. Reconciliation history, access control, and metadata live in a local SQLite database (or your own Postgres in production). Bring-your-own-key credentials are encrypted at rest.",
   },
   {
-    q: "Do I have to self-host?",
-    a: "No. Run it fully local by default, or connect a hosted Cognee Cloud tenant for managed graph-vector memory. Operations fall back to local automatically.",
+    q: "Open source or hosted?",
+    a: "Both. Engram is open source and runs locally by default, or routes remember, recall, improve and forget to a hosted Cognee Cloud tenant over REST — with automatic local fallback.",
   },
 ];
 
-/* ── Hero constellation — a living memory graph in pure SVG ─────── */
-
-const NODES = [
-  { id: 0, x: 300, y: 170, r: 26, core: true },
-  { id: 1, x: 140, y: 90, r: 9 },
-  { id: 2, x: 470, y: 90, r: 11 },
-  { id: 3, x: 90, y: 230, r: 8 },
-  { id: 4, x: 520, y: 240, r: 10 },
-  { id: 5, x: 210, y: 300, r: 7 },
-  { id: 6, x: 400, y: 300, r: 9 },
-  { id: 7, x: 300, y: 40, r: 6 },
-];
-const EDGES = [
-  [0, 1], [0, 2], [0, 3], [0, 4], [0, 5], [0, 6], [0, 7], [1, 7], [2, 4], [3, 5], [4, 6],
-];
-
-const NodeField = () => (
-  <svg viewBox="0 0 600 340" className="w-full h-full" fill="none" aria-hidden>
-    <defs>
-      <linearGradient id="edgeGrad" x1="0" y1="0" x2="1" y2="1">
-        <stop offset="0%" stopColor="var(--color-gradient-lavender)" />
-        <stop offset="100%" stopColor="var(--color-gradient-sky)" />
-      </linearGradient>
-      <radialGradient id="coreGlow" cx="50%" cy="50%" r="50%">
-        <stop offset="0%" stopColor="var(--color-gradient-lavender)" stopOpacity="0.9" />
-        <stop offset="100%" stopColor="var(--color-gradient-sky)" stopOpacity="0.75" />
-      </radialGradient>
-    </defs>
-    {EDGES.map(([a, b], i) => (
-      <line
-        key={i}
-        x1={NODES[a].x} y1={NODES[a].y} x2={NODES[b].x} y2={NODES[b].y}
-        stroke="url(#edgeGrad)" strokeWidth="1.25" strokeOpacity="0.4"
-        strokeDasharray="4 6" className="source-line"
-      />
-    ))}
-    {NODES.map((n) => (
-      <g key={n.id} className={n.core ? "cognee-breathe" : "source-float"} style={{ transformBox: "fill-box", transformOrigin: "center", animationDelay: `${n.id * 0.4}s` }}>
-        {n.core ? (
-          <>
-            <circle cx={n.x} cy={n.y} r={n.r + 14} fill="url(#coreGlow)" opacity="0.25" />
-            <circle cx={n.x} cy={n.y} r={n.r} fill="url(#coreGlow)" />
-          </>
-        ) : (
-          <circle cx={n.x} cy={n.y} r={n.r} fill="var(--color-surface-card)" stroke="url(#edgeGrad)" strokeWidth="1.5" />
-        )}
-      </g>
-    ))}
-  </svg>
-);
-
-/* ── Custom Engram product mockup (replaces old screenshots) ────── */
-
-const GlowFrame = ({ children }: { children: React.ReactNode }) => (
-  <div className="relative rounded-2xl p-[1px] overflow-hidden" style={{ background: ACCENT }}>
-    <div className="rounded-[15px] bg-[var(--color-surface-card)] overflow-hidden">{children}</div>
-  </div>
-);
-
-const ResolveMockup = () => (
-  <GlowFrame>
-    <div className="flex items-center gap-2 px-4 py-3 border-b border-[var(--color-hairline)]">
-      <span className="w-2.5 h-2.5 rounded-full bg-[var(--color-gradient-rose)]/60" />
-      <span className="w-2.5 h-2.5 rounded-full bg-[var(--color-gradient-peach)]/60" />
-      <span className="w-2.5 h-2.5 rounded-full bg-[var(--color-gradient-mint)]/60" />
-      <span className="ml-3 text-[11px] font-mono text-[var(--color-muted)]">engram · resolve</span>
-      <span className="ml-auto text-[10px] font-semibold px-2 py-1 rounded-full" style={{ background: "color-mix(in srgb, var(--color-gradient-peach) 15%, transparent)", color: "var(--color-gradient-peach)" }}>
-        Conflict #341
-      </span>
-    </div>
-    <div className="p-5">
-      <p className="text-sm font-semibold text-[var(--color-ink)] mb-4">Database choice — which fact still holds?</p>
-      <div className="grid grid-cols-2 gap-3">
-        <div className="rounded-xl border border-[var(--color-hairline)] p-3.5 bg-[var(--color-surface-strong)]/40">
-          <p className="caption-upper text-[10px] text-[var(--color-muted)] mb-2">Old belief · 0.12</p>
-          <p className="text-sm font-medium text-[var(--color-body-strong)]">Postgres</p>
-          <p className="text-[11px] text-[var(--color-muted)] mt-1">project_spec.md · Oct 15</p>
-          <div className="mt-3 h-1 rounded-full bg-[var(--color-hairline)] overflow-hidden">
-            <div className="h-full w-[12%] rounded-full bg-[var(--color-muted-soft)]" />
-          </div>
-        </div>
-        <div className="rounded-xl p-3.5" style={{ border: "1px solid color-mix(in srgb, var(--color-gradient-sky) 45%, transparent)", background: "color-mix(in srgb, var(--color-gradient-sky) 8%, transparent)" }}>
-          <p className="caption-upper text-[10px] mb-2" style={{ color: "var(--color-gradient-sky)" }}>New evidence · 0.95</p>
-          <p className="text-sm font-medium text-[var(--color-body-strong)]">Supabase</p>
-          <p className="text-[11px] text-[var(--color-muted)] mt-1">adr_v4.pdf · Nov 20</p>
-          <div className="mt-3 h-1 rounded-full bg-[var(--color-hairline)] overflow-hidden">
-            <div className="h-full w-[95%] rounded-full" style={{ background: ACCENT }} />
-          </div>
-        </div>
-      </div>
-      <div className="flex gap-2 mt-4">
-        <button className="flex-1 text-xs font-medium py-2 rounded-lg border border-[var(--color-hairline)] text-[var(--color-muted)]">Keep old</button>
-        <button className="flex-1 text-xs font-semibold py-2 rounded-lg text-[var(--color-on-primary)]" style={{ background: ACCENT }}>Keep new</button>
-        <button className="flex-1 text-xs font-medium py-2 rounded-lg border border-[var(--color-hairline)] text-[var(--color-muted)]">Keep both</button>
-      </div>
-    </div>
-  </GlowFrame>
-);
-
-/* ── FAQ accordion (CSS-only, new style) ───────────────────────── */
-
-const FaqRow = ({ q, a, open, onToggle }: { q: string; a: string; open: boolean; onToggle: () => void }) => (
-  <div className="border-b border-[var(--color-hairline)]">
-    <button onClick={onToggle} className="w-full flex items-center justify-between gap-4 py-5 text-left group">
-      <span className="text-[15px] md:text-base font-medium text-[var(--color-ink)]">{q}</span>
-      <span
-        className="shrink-0 grid place-items-center w-7 h-7 rounded-full border border-[var(--color-hairline)] text-[var(--color-muted)] transition-transform duration-300"
-        style={{ transform: open ? "rotate(45deg)" : "none" }}
-      >
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M12 5v14M5 12h14" /></svg>
-      </span>
-    </button>
-    <div className="grid transition-all duration-300 ease-out" style={{ gridTemplateRows: open ? "1fr" : "0fr" }}>
-      <div className="overflow-hidden">
-        <p className="pb-5 text-sm text-[var(--color-body)] leading-relaxed max-w-2xl">{a}</p>
-      </div>
-    </div>
-  </div>
-);
-
-/* ── Page ──────────────────────────────────────────────────────── */
+const SOURCES = ["GitHub", "PDF", "ChatGPT", "Claude", "Articles", "YouTube"];
 
 export default function LandingPage() {
   const router = useRouter();
   const { resolvedTheme, setTheme } = useTheme();
   const { data: session } = useSession();
-  const wrapRef = useRef<HTMLDivElement>(null);
-  const lenisRef = useRef<Lenis | null>(null);
-
   const [mounted, setMounted] = useState(false);
   const [entering, setEntering] = useState(false);
   const [scrolled, setScrolled] = useState(false);
-  const [menuOpen, setMenuOpen] = useState(false);
-  const [openFaq, setOpenFaq] = useState<number | null>(0);
-  const [stats, setStats] = useState<{ sources: number; entities: number; conflicts: number } | null>(null);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [openFaqIndex, setOpenFaqIndex] = useState<number | null>(0);
+  const [showUserMenu, setShowUserMenu] = useState(false);
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const lenisRef = useRef<Lenis | null>(null);
 
-  const isDark = mounted && resolvedTheme === "dark";
+  const [liveStats, setLiveStats] = useState<{ sourcesCount: number; entitiesCount: number; conflictsCount: number } | null>(null);
 
-  const enter = () => {
-    setEntering(true);
-    setTimeout(() => router.push(session ? "/graph" : "/login"), 450);
-  };
+  const navLinks = [
+    { id: "#lifecycle", label: "Lifecycle" },
+    { id: "#features", label: "Features" },
+    { id: "#how", label: "How it works" },
+    { id: "#faq", label: "FAQ" },
+  ];
 
-  const scrollTo = (e: React.MouseEvent<HTMLAnchorElement>, id: string) => {
+  const handleNavClick = (e: React.MouseEvent<HTMLAnchorElement>, targetId: string) => {
     e.preventDefault();
-    setMenuOpen(false);
-    if (lenisRef.current) lenisRef.current.scrollTo(id, { duration: 1.3 });
-    else document.querySelector(id)?.scrollIntoView({ behavior: "smooth" });
+    if (lenisRef.current) {
+      lenisRef.current.scrollTo(targetId, { duration: 1.3, easing: (t) => Math.min(1, 1.001 - Math.pow(2, -10 * t)) });
+    } else {
+      document.querySelector(targetId)?.scrollIntoView({ behavior: "smooth" });
+    }
+    setIsMobileMenuOpen(false);
   };
 
   useEffect(() => {
@@ -272,69 +125,80 @@ export default function LandingPage() {
     setMounted(true);
   }, []);
 
-  // Live metrics from the backend via the proxy
   useEffect(() => {
-    (async () => {
+    async function fetchStats() {
       try {
-        const [s, sc, rc] = await Promise.all([
+        const [sourcesRes, schemaRes, reconcileRes] = await Promise.all([
           fetch("/api/proxy/sources"),
           fetch("/api/proxy/schema-inventory"),
           fetch("/api/proxy/reconciliation/events"),
         ]);
-        let sources = 0, entities = 0, conflicts = 0;
-        if (s.ok) { const j = await s.json(); sources = Array.isArray(j) ? j.length : 0; }
-        if (sc.ok) { const j = await sc.json(); if (Array.isArray(j)) entities = j.reduce((a, c) => a + (c.count || 0), 0); }
-        if (rc.ok) { const j = await rc.json(); if (Array.isArray(j)) conflicts = j.filter((e) => e.status === "pending" || e.status === "detected").length; }
-        setStats({ sources, entities, conflicts });
-      } catch { /* stats stay null → placeholder shown */ }
-    })();
+        let sourcesCount = 0, entitiesCount = 0, conflictsCount = 0;
+        if (sourcesRes.ok) {
+          const sources = await sourcesRes.json();
+          sourcesCount = Array.isArray(sources) ? sources.length : 0;
+        }
+        if (schemaRes.ok) {
+          const schema = await schemaRes.json();
+          if (Array.isArray(schema)) entitiesCount = schema.reduce((acc, curr) => acc + (curr.count || 0), 0);
+        }
+        if (reconcileRes.ok) {
+          const events = await reconcileRes.json();
+          if (Array.isArray(events)) conflictsCount = events.filter((e) => e.status === "pending" || e.status === "detected").length;
+        }
+        setLiveStats({ sourcesCount, entitiesCount, conflictsCount });
+      } catch (err) {
+        console.error("Failed to load live stats:", err);
+      }
+    }
+    fetchStats();
   }, []);
 
-  // Smooth scroll + hero intro
   useEffect(() => {
-    const onScroll = () => setScrolled(window.scrollY > 40);
-    window.addEventListener("scroll", onScroll);
+    const handleScroll = () => setScrolled(window.scrollY > 40);
+    window.addEventListener("scroll", handleScroll);
 
+    const htmlHasHFull = document.documentElement.classList.contains("h-full");
+    const bodyHasHFull = document.body.classList.contains("h-full");
     document.documentElement.classList.remove("h-full");
     document.documentElement.classList.add("min-h-screen");
     document.body.classList.remove("h-full");
     document.body.classList.add("min-h-screen");
 
-    const lenis = new Lenis({ duration: 1.15, smoothWheel: true });
+    const lenis = new Lenis({ duration: 1.15, easing: (t) => Math.min(1, 1.001 - Math.pow(2, -10 * t)), smoothWheel: true });
     lenisRef.current = lenis;
-    const raf = (t: number) => lenis.raf(t * 1000);
-    gsap.ticker.add(raf);
-    gsap.ticker.lagSmoothing(0);
+    let rafId = 0;
+    const raf = (time: number) => {
+      lenis.raf(time);
+      rafId = requestAnimationFrame(raf);
+    };
+    rafId = requestAnimationFrame(raf);
 
     return () => {
-      window.removeEventListener("scroll", onScroll);
-      document.documentElement.classList.add("h-full");
-      document.documentElement.classList.remove("min-h-screen");
-      document.body.classList.add("h-full");
-      document.body.classList.remove("min-h-screen");
-      gsap.ticker.remove(raf);
+      window.removeEventListener("scroll", handleScroll);
+      if (htmlHasHFull) {
+        document.documentElement.classList.add("h-full");
+        document.documentElement.classList.remove("min-h-screen");
+      }
+      if (bodyHasHFull) {
+        document.body.classList.add("h-full");
+        document.body.classList.remove("min-h-screen");
+      }
+      cancelAnimationFrame(rafId);
       lenis.destroy();
       lenisRef.current = null;
     };
   }, []);
 
-  useGSAP(() => {
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
-      gsap.set(".hero-in", { opacity: 1, y: 0 });
-      return;
-    }
-    gsap.fromTo(".hero-in", { y: 26, opacity: 0 }, { y: 0, opacity: 1, stagger: 0.09, duration: 0.85, ease: "power3.out", delay: 0.05 });
-  }, { scope: wrapRef });
+  const enter = () => {
+    setEntering(true);
+    setTimeout(() => router.push(session ? "/graph" : "/login"), 450);
+  };
 
-  const metric = (v: number | undefined, fallback: string) =>
-    stats ? v!.toLocaleString() : fallback;
+  const isDark = mounted && resolvedTheme === "dark";
 
   return (
-    <div
-      ref={wrapRef}
-      className="relative min-h-screen bg-[var(--color-canvas)] text-[var(--color-ink)] font-sans overflow-x-clip transition-opacity duration-500"
-      style={{ opacity: entering ? 0 : 1 }}
-    >
+    <div ref={wrapRef} className="relative min-h-screen bg-canvas text-ink font-sans overflow-x-clip selection:bg-[var(--color-gradient-sky)]/25">
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{
@@ -350,274 +214,501 @@ export default function LandingPage() {
         }}
       />
 
-      {/* ══ NAV ══ */}
-      <header className={`fixed inset-x-0 top-0 z-50 transition-all duration-300 ${scrolled ? "py-2" : "py-4"}`}>
-        <nav className={`mx-auto max-w-6xl px-4 md:px-6`}>
-          <div className={`flex items-center justify-between rounded-2xl px-4 md:px-5 h-14 transition-all duration-300 ${scrolled ? "bg-[var(--color-surface-card)]/80 backdrop-blur-xl border border-[var(--color-hairline)] shadow-[0_8px_30px_rgba(0,0,0,0.06)]" : "border border-transparent"}`}>
-            <a href="#top" onClick={(e) => scrollTo(e, "#top")} className="flex items-center gap-2 cursor-pointer">
-              <Image src="/logo.png" alt="Engram" width={30} height={30} priority className="object-contain rounded-md" />
-              <span className="text-[19px] font-semibold tracking-tight">Engram</span>
-            </a>
+      {/* Page-enter fade veil */}
+      <div className={`fixed inset-0 z-[100] bg-canvas pointer-events-none transition-opacity duration-500 ${entering ? "opacity-100" : "opacity-0"}`} />
 
-            <div className="hidden md:flex items-center gap-7 text-[14px] text-[var(--color-body)]">
-              <a href="#lifecycle" onClick={(e) => scrollTo(e, "#lifecycle")} className="hover:text-[var(--color-ink)] transition-colors">Lifecycle</a>
-              <a href="#features" onClick={(e) => scrollTo(e, "#features")} className="hover:text-[var(--color-ink)] transition-colors">Features</a>
-              <a href="#faq" onClick={(e) => scrollTo(e, "#faq")} className="hover:text-[var(--color-ink)] transition-colors">FAQ</a>
-            </div>
+      {/* ═══════ NAV ═══════ */}
+      <nav className={`fixed top-0 inset-x-0 z-50 h-16 transition-all duration-300 ${scrolled ? "bg-canvas/80 backdrop-blur-xl border-b border-hairline" : "border-b border-transparent"}`}>
+        <div className="max-w-[1180px] mx-auto px-5 sm:px-6 h-full flex items-center justify-between">
+          <a href="#hero" onClick={(e) => handleNavClick(e, "#hero")} className="flex items-center gap-2 cursor-pointer" aria-label="Engram home">
+            <Image src="/logo.png" alt="Engram" width={30} height={30} priority className="object-contain rounded-md" />
+            <span className="text-[19px] font-semibold tracking-tight">Engram</span>
+          </a>
 
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => setTheme(isDark ? "light" : "dark")}
-                aria-label="Toggle theme"
-                className="grid place-items-center w-9 h-9 rounded-lg text-[var(--color-muted)] hover:text-[var(--color-ink)] hover:bg-[var(--color-surface-strong)] transition-colors cursor-pointer"
-              >
-                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  {isDark ? <><circle cx="12" cy="12" r="4" /><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" /></> : <path d="M21 12.8A9 9 0 1 1 11.2 3 7 7 0 0 0 21 12.8z" />}
-                </svg>
-              </button>
-              <button onClick={enter} className="hidden sm:inline-flex items-center gap-1.5 text-[13px] font-semibold px-4 h-9 rounded-lg text-[var(--color-on-primary)] cursor-pointer transition-transform hover:scale-[1.03]" style={{ background: ACCENT }}>
-                {session ? "Open app" : "Launch"}
-              </button>
-              <button onClick={() => setMenuOpen(!menuOpen)} className="md:hidden grid place-items-center w-9 h-9 rounded-lg text-[var(--color-ink)]" aria-label="Menu">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d={menuOpen ? "M6 6l12 12M6 18L18 6" : "M4 7h16M4 12h16M4 17h16"} /></svg>
-              </button>
-            </div>
-          </div>
-
-          {menuOpen && (
-            <div className="md:hidden mt-2 rounded-2xl bg-[var(--color-surface-card)] border border-[var(--color-hairline)] p-4 flex flex-col gap-3 text-[15px]">
-              <a href="#lifecycle" onClick={(e) => scrollTo(e, "#lifecycle")} className="text-[var(--color-body)]">Lifecycle</a>
-              <a href="#features" onClick={(e) => scrollTo(e, "#features")} className="text-[var(--color-body)]">Features</a>
-              <a href="#faq" onClick={(e) => scrollTo(e, "#faq")} className="text-[var(--color-body)]">FAQ</a>
-              <button onClick={enter} className="mt-1 text-[14px] font-semibold py-2.5 rounded-lg text-[var(--color-on-primary)]" style={{ background: ACCENT }}>{session ? "Open app" : "Launch Engram"}</button>
-            </div>
-          )}
-        </nav>
-      </header>
-
-      {/* ══ HERO ══ */}
-      <section id="top" className="relative pt-36 md:pt-44 pb-20 px-4 md:px-6 overflow-hidden">
-        {/* ambient glow */}
-        <div className="pointer-events-none absolute inset-0 -z-10">
-          <div className="absolute left-1/2 top-24 -translate-x-1/2 w-[720px] h-[420px] rounded-full blur-[120px] opacity-[0.18]" style={{ background: ACCENT }} />
-        </div>
-
-        <div className="mx-auto max-w-5xl text-center">
-          <div className="hero-in inline-flex items-center gap-2 rounded-full border border-[var(--color-hairline)] bg-[var(--color-surface-card)] px-3.5 py-1.5 text-[12px] font-medium text-[var(--color-body)] mb-7">
-            <span className="w-1.5 h-1.5 rounded-full" style={{ background: ACCENT }} />
-            Memory lifecycle · powered by Cognee
-          </div>
-
-          <h1 className="hero-in display-mega mb-6">
-            Give your AI a memory<br className="hidden sm:block" /> that <GradientText>edits itself.</GradientText>
-          </h1>
-
-          <p className="hero-in mx-auto max-w-2xl text-[17px] md:text-lg text-[var(--color-body)] leading-relaxed mb-9">
-            Engram folds your repos, docs, and conversations into a living knowledge graph — catching contradictions the moment they appear, letting stale facts decay, and keeping only what still holds true.
-          </p>
-
-          <div className="hero-in flex flex-col sm:flex-row items-center justify-center gap-3 mb-16">
-            <button onClick={enter} className="group inline-flex items-center gap-2 px-6 h-12 rounded-xl text-[15px] font-semibold text-[var(--color-on-primary)] cursor-pointer transition-transform hover:scale-[1.03]" style={{ background: ACCENT }}>
-              {session ? "Open your graph" : "Launch Engram"}
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="transition-transform group-hover:translate-x-0.5"><path d="M5 12h14M13 6l6 6-6 6" /></svg>
+          <div className="hidden md:flex items-center gap-7">
+            {navLinks.map((l) => (
+              <a key={l.id} href={l.id} onClick={(e) => handleNavClick(e, l.id)} className="text-[14px] font-medium text-body hover:text-ink transition-colors">
+                {l.label}
+              </a>
+            ))}
+            <a href="https://github.com/Aditya060806/Engram" target="_blank" rel="noreferrer" className="text-[14px] font-medium text-body hover:text-ink transition-colors">GitHub</a>
+            <button
+              onClick={() => setTheme(resolvedTheme === "dark" ? "light" : "dark")}
+              className="p-2 rounded-lg text-muted hover:text-ink hover:bg-surface-strong transition-all cursor-pointer"
+              title={mounted ? `Switch to ${isDark ? "light" : "dark"} mode` : "Switch theme"}
+            >
+              <ThemeIcon isDark={isDark} />
             </button>
-            <a href={REPO_URL} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 px-6 h-12 rounded-xl text-[15px] font-medium border border-[var(--color-hairline)] bg-[var(--color-surface-card)] text-[var(--color-ink)] hover:bg-[var(--color-surface-strong)] transition-colors">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.3 3.44 9.8 8.2 11.4.6.1.83-.26.83-.58v-2c-3.34.72-4.04-1.6-4.04-1.6-.55-1.4-1.34-1.76-1.34-1.76-1.08-.75.09-.73.09-.73 1.2.09 1.83 1.24 1.83 1.24 1.07 1.83 2.8 1.3 3.49.99.1-.78.42-1.3.76-1.6-2.67-.3-5.47-1.33-5.47-5.93 0-1.31.47-2.38 1.24-3.22-.13-.3-.54-1.52.12-3.17 0 0 1-.32 3.3 1.23a11.5 11.5 0 0 1 6 0c2.3-1.55 3.3-1.23 3.3-1.23.66 1.65.25 2.87.12 3.17.77.84 1.23 1.91 1.23 3.22 0 4.61-2.8 5.63-5.48 5.92.43.37.81 1.1.81 2.22v3.29c0 .32.22.69.83.57C20.56 21.8 24 17.3 24 12c0-6.63-5.37-12-12-12z" /></svg>
-              View source
-            </a>
+            {session ? (
+              <div className="relative">
+                <button onClick={() => setShowUserMenu(!showUserMenu)} className="w-8 h-8 rounded-full bg-ink text-canvas text-[13px] font-semibold flex items-center justify-center hover:opacity-90 transition-opacity cursor-pointer" title="Account">
+                  {session.user?.name?.charAt(0) || "U"}
+                </button>
+                {showUserMenu && (
+                  <>
+                    <div className="fixed inset-0 z-40" onClick={() => setShowUserMenu(false)} />
+                    <div className="absolute right-0 top-full mt-2 z-50 w-40 py-1 rounded-xl border border-hairline bg-surface-card shadow-lg">
+                      <button onClick={() => router.push("/graph")} className="w-full px-4 py-2 text-left text-[13px] font-medium text-body hover:bg-surface-strong transition-colors cursor-pointer">Open app</button>
+                      <button onClick={() => { signOut(); setShowUserMenu(false); }} className="w-full px-4 py-2 text-left text-[13px] font-medium text-body hover:bg-surface-strong transition-colors cursor-pointer">Sign out</button>
+                    </div>
+                  </>
+                )}
+              </div>
+            ) : (
+              <button onClick={enter} className="text-[14px] font-semibold px-4 py-2 rounded-full bg-ink text-canvas hover:opacity-90 transition-opacity cursor-pointer">
+                Open app
+              </button>
+            )}
           </div>
 
-          {/* live memory graph visual */}
-          <div className="hero-in relative mx-auto max-w-3xl rounded-3xl border border-[var(--color-hairline)] bg-[var(--color-surface-card)]/60 backdrop-blur-sm p-6 md:p-10">
-            <div className="aspect-[600/340] w-full"><NodeField /></div>
-            <div className="absolute left-1/2 -bottom-px -translate-x-1/2 h-px w-2/3" style={{ background: ACCENT, opacity: 0.5 }} />
+          <button onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)} className="md:hidden text-ink" aria-label="Menu">
+            <svg width="24" height="24" fill="none" stroke="currentColor" strokeWidth="2">
+              {isMobileMenuOpen ? <path strokeLinecap="round" d="M6 18L18 6M6 6l12 12" /> : <path strokeLinecap="round" d="M4 7h16M4 12h16M4 17h16" />}
+            </svg>
+          </button>
+        </div>
+
+        {isMobileMenuOpen && (
+          <div className="md:hidden bg-canvas border-b border-hairline px-6 py-5 flex flex-col gap-3">
+            {navLinks.map((l) => (
+              <a key={l.id} href={l.id} onClick={(e) => handleNavClick(e, l.id)} className="text-[15px] font-medium text-body py-1">{l.label}</a>
+            ))}
+            <a href="https://github.com/Aditya060806/Engram" target="_blank" rel="noreferrer" onClick={() => setIsMobileMenuOpen(false)} className="text-[15px] font-medium text-body py-1">GitHub</a>
+            <button onClick={() => setTheme(resolvedTheme === "dark" ? "light" : "dark")} className="flex items-center gap-2 text-[15px] font-medium text-body py-1 cursor-pointer">
+              <ThemeIcon isDark={isDark} /> {mounted ? (isDark ? "Light mode" : "Dark mode") : "Theme"}
+            </button>
+            <button onClick={enter} className="mt-1 text-[15px] font-semibold px-4 py-2.5 rounded-full bg-ink text-canvas cursor-pointer">Open app</button>
           </div>
+        )}
+      </nav>
+
+      {/* ═══════ HERO ═══════ */}
+      <section id="hero" className="relative pt-32 sm:pt-40 pb-20 px-5 sm:px-6">
+        <div className="absolute inset-0 grid-backdrop pointer-events-none" />
+        <div aria-hidden className="ambient-orb pointer-events-none absolute -top-24 left-[8%] w-[380px] h-[380px] rounded-full blur-[90px] opacity-[0.16]" style={{ background: "var(--color-gradient-lavender)" }} />
+        <div aria-hidden className="ambient-orb pointer-events-none absolute top-10 right-[6%] w-[420px] h-[420px] rounded-full blur-[100px] opacity-[0.14]" style={{ background: "var(--color-gradient-sky)", animationDelay: "3s" }} />
+
+        <div className="relative max-w-[1180px] mx-auto">
+          <div className="max-w-3xl mx-auto text-center">
+            <Reveal>
+              <span className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full border border-hairline bg-surface-card/60 backdrop-blur-sm caption-upper text-muted">
+                <span className="relative w-1.5 h-1.5 rounded-full bg-[var(--color-semantic-success)] pulse-ring" />
+                Built on the Cognee memory lifecycle
+              </span>
+            </Reveal>
+            <Reveal delay={80}>
+              <h1 className="display-mega mt-7">
+                Memory that knows<br className="hidden sm:block" /> when to <span className="text-aurora">update itself</span>.
+              </h1>
+            </Reveal>
+            <Reveal delay={160}>
+              <p className="mt-6 text-lg sm:text-xl text-body leading-relaxed max-w-2xl mx-auto">
+                Your AI forgets last night and confidently repeats stale facts. Engram is the self-reconciling memory layer that catches contradictions the moment they appear — and forgets only what has stopped mattering.
+              </p>
+            </Reveal>
+            <Reveal delay={240}>
+              <div className="mt-9 flex flex-col sm:flex-row items-center justify-center gap-3">
+                <button onClick={enter} className="group inline-flex items-center gap-2 px-6 py-3.5 rounded-full bg-ink text-canvas text-[15px] font-semibold hover:opacity-90 transition-all hover:scale-[1.02] active:scale-95 cursor-pointer">
+                  {session ? "Open the app" : "Get started free"}
+                  <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="group-hover:translate-x-0.5 transition-transform"><path d="M5 12h14M13 6l6 6-6 6" /></svg>
+                </button>
+                <a href="https://github.com/Aditya060806/Engram" target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 px-6 py-3.5 rounded-full border border-hairline bg-surface-card text-[15px] font-semibold text-ink hover:bg-surface-strong transition-colors">
+                  <svg className="w-4.5 h-4.5" viewBox="0 0 24 24" fill="currentColor" width="18" height="18"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z" /></svg>
+                  View on GitHub
+                </a>
+              </div>
+            </Reveal>
+          </div>
+
+          {/* Hero showpiece — built-in reconciliation UI */}
+          <Reveal delay={300} className="mt-16 sm:mt-20 max-w-4xl mx-auto">
+            <AppFrame url={`${BASE_URL.replace(/^https?:\/\//, "")}/resolve`}>
+              <ReconciliationDemo />
+            </AppFrame>
+          </Reveal>
         </div>
       </section>
 
-      {/* ══ LIVE METRICS ══ */}
-      <section className="px-4 md:px-6 pb-24">
-        <div className="mx-auto max-w-5xl grid grid-cols-3 divide-x divide-[var(--color-hairline)] rounded-2xl border border-[var(--color-hairline)] bg-[var(--color-surface-card)] py-8">
-          {[
-            { v: metric(stats?.sources, "—"), l: "Sources remembered" },
-            { v: metric(stats?.entities, "—"), l: "Entities mapped" },
-            { v: metric(stats?.conflicts, "—"), l: "Conflicts flagged" },
-          ].map((m, i) => (
-            <div key={i} className="text-center px-2">
-              <div className="display-md tabular-nums"><GradientText>{m.v}</GradientText></div>
-              <div className="mt-1 text-[12px] md:text-[13px] text-[var(--color-muted)]">{m.l}</div>
-            </div>
-          ))}
+      {/* ═══════ STATS BAND ═══════ */}
+      <section id="stats" className="px-5 sm:px-6 py-14 border-y border-hairline bg-surface-card/40">
+        <div className="max-w-[1180px] mx-auto grid grid-cols-2 md:grid-cols-4 gap-8">
+          <Stat label="Sources remembered" value={liveStats?.sourcesCount ?? 0} loaded={!!liveStats} />
+          <Stat label="Entities in graph" value={liveStats?.entitiesCount ?? 0} loaded={!!liveStats} />
+          <Stat label="Conflicts pending" value={liveStats?.conflictsCount ?? 0} loaded={!!liveStats} />
+          <Stat label="Lifecycle operations" value={4} loaded suffix="" />
         </div>
       </section>
 
-      {/* ══ THE DRIFT PROBLEM ══ */}
-      <section className="px-4 md:px-6 py-24 border-t border-[var(--color-hairline)]">
-        <div className="mx-auto max-w-5xl">
+      {/* ═══════ LIFECYCLE ═══════ */}
+      <section id="lifecycle" className="px-5 sm:px-6 py-24">
+        <div className="max-w-[1180px] mx-auto">
           <Reveal className="max-w-2xl">
-            <Kicker>The drift problem</Kicker>
-            <h2 className="display-lg mb-4">Append-only memory rots.</h2>
-            <p className="text-[var(--color-body)] leading-relaxed text-[16px]">
-              Most tools just pile new text on top of old. Credentials rotate, stacks change, decisions get reversed — and the model keeps citing whichever version it retrieves first. Confidence stays high while accuracy quietly collapses.
-            </p>
+            <p className="caption-upper text-muted">The memory lifecycle</p>
+            <h2 className="display-lg mt-3">Four operations. All load-bearing.</h2>
+            <p className="mt-4 text-body text-lg leading-relaxed">Engram wires the full Cognee lifecycle to both the local SDK and a hosted Cognee Cloud tenant — remember, recall, improve, and forget all route to the cloud when connected, with automatic local fallback.</p>
+          </Reveal>
+          <div className="mt-12 grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            {MEMORY_OPS.map((op, i) => (
+              <Reveal key={op.name} delay={i * 80}>
+                <div className="card-lift h-full rounded-2xl border border-hairline bg-surface-card p-6">
+                  <div className="w-11 h-11 rounded-xl flex items-center justify-center mb-5" style={{ background: `color-mix(in srgb, ${op.tint} 14%, transparent)`, color: op.tint }}>
+                    {op.icon}
+                  </div>
+                  <div className="flex items-baseline gap-2">
+                    <span className="font-mono text-[15px] font-semibold text-ink">{op.name}()</span>
+                    {op.alias && <span className="text-[11px] text-muted-soft">· {op.alias}</span>}
+                  </div>
+                  <p className="mt-2.5 text-[14px] text-body leading-relaxed">{op.desc}</p>
+                </div>
+              </Reveal>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ═══════ FEATURES BENTO ═══════ */}
+      <section id="features" className="px-5 sm:px-6 pb-24">
+        <div className="max-w-[1180px] mx-auto">
+          <Reveal className="max-w-2xl mb-12">
+            <p className="caption-upper text-muted">What makes it different</p>
+            <h2 className="display-lg mt-3">Most memory tools stop at recall. This one decides what still deserves trust.</h2>
           </Reveal>
 
-          <div className="grid md:grid-cols-2 gap-5 mt-12">
-            <Reveal className="rounded-2xl border border-[var(--color-hairline)] bg-[var(--color-surface-card)] p-7">
-              <p className="caption-upper text-[var(--color-muted)] mb-5">Typical memory tools</p>
-              <ul className="space-y-3.5">
-                {["Store everything, forever", "Never check for contradictions", "Stale facts resurface with full confidence"].map((t) => (
-                  <li key={t} className="flex items-start gap-3 text-[15px] text-[var(--color-body)]">
-                    <span className="mt-1.5 shrink-0 w-4 h-4 rounded-full grid place-items-center border border-[var(--color-hairline-strong)] text-[var(--color-muted-soft)]">
-                      <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round"><path d="M6 6l12 12M6 18L18 6" /></svg>
-                    </span>
-                    {t}
-                  </li>
-                ))}
-              </ul>
+          <div className="grid md:grid-cols-3 gap-4">
+            {/* Reconciliation — wide */}
+            <Reveal className="md:col-span-2">
+              <div className="card-lift h-full rounded-3xl border border-hairline bg-surface-card p-7 sm:p-9">
+                <FeatureHead tint="var(--color-conflict-warning)" title="The reconciliation engine" />
+                <p className="mt-3 text-body leading-relaxed max-w-lg">When new evidence contradicts something you already believe, Engram catches it at ingestion and routes it to an inbox. Keep the new claim, keep the old one, or keep both as alternatives — every decision is logged.</p>
+                <div className="mt-7"><ConflictRow /></div>
+              </div>
             </Reveal>
 
-            <Reveal delay={100} className="relative rounded-2xl p-[1px] overflow-hidden" >
-              <div className="absolute inset-0" style={{ background: ACCENT, opacity: 0.5 }} />
-              <div className="relative rounded-[15px] bg-[var(--color-surface-card)] p-7 h-full">
-                <p className="caption-upper mb-5" style={{ color: "var(--color-gradient-lavender)" }}>With Engram</p>
-                <ul className="space-y-3.5">
-                  {["Detects contradictions at ingestion", "Scores confidence continuously over time", "Forgets what no longer deserves trust"].map((t) => (
-                    <li key={t} className="flex items-start gap-3 text-[15px] text-[var(--color-body-strong)]">
-                      <span className="mt-1 shrink-0 w-4 h-4 rounded-full grid place-items-center text-[var(--color-on-primary)]" style={{ background: ACCENT }}>
-                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12l5 5L20 6" /></svg>
-                      </span>
-                      {t}
-                    </li>
+            {/* Decay */}
+            <Reveal delay={80}>
+              <div className="card-lift h-full rounded-3xl border border-hairline bg-surface-card p-7">
+                <FeatureHead tint="var(--color-gradient-rose)" title="Confidence decay" />
+                <p className="mt-3 text-body leading-relaxed">Unreinforced facts lose confidence over time. Drop below the threshold and Engram forgets them automatically.</p>
+                <div className="mt-6 space-y-4">
+                  <DecayBar label="postgres" value={0.12} tint="var(--color-gradient-rose)" />
+                  <DecayBar label="supabase" value={0.95} tint="var(--color-semantic-success)" />
+                </div>
+              </div>
+            </Reveal>
+
+            {/* Temporal diffs */}
+            <Reveal>
+              <div className="card-lift h-full rounded-3xl border border-hairline bg-surface-card p-7">
+                <FeatureHead tint="var(--color-gradient-sky)" title="Temporal diffs" />
+                <p className="mt-3 text-body leading-relaxed">Ask &ldquo;what changed since March?&rdquo; and get a diff of added nodes, superseded beliefs, and new decisions.</p>
+              </div>
+            </Reveal>
+
+            {/* Recap — wide */}
+            <Reveal delay={80} className="md:col-span-2">
+              <div className="card-lift h-full rounded-3xl border border-hairline bg-surface-card p-7 sm:p-9 flex flex-col sm:flex-row sm:items-center gap-6 justify-between">
+                <div className="max-w-lg">
+                  <FeatureHead tint="var(--color-gradient-lavender)" title="The Recap — where&rsquo;s my context?" />
+                  <p className="mt-3 text-body leading-relaxed">A morning-after digest of your memory. For any window, Engram stitches every lifecycle operation into one grounded narrative: what you remembered, reconciled, reinforced, and forgot.</p>
+                </div>
+                <div className="shrink-0 rounded-2xl border border-hairline bg-surface-strong/60 px-5 py-4 text-center">
+                  <div className="text-[11px] caption-upper text-muted">last 7 days</div>
+                  <div className="display-md mt-1">+12</div>
+                  <div className="text-[12px] text-muted">memories reconciled</div>
+                </div>
+              </div>
+            </Reveal>
+
+            {/* BYOK */}
+            <Reveal>
+              <div className="card-lift h-full rounded-3xl border border-hairline bg-surface-card p-7">
+                <FeatureHead tint="var(--color-gradient-mint)" title="Bring your own key" />
+                <p className="mt-3 text-body leading-relaxed">Connect Groq, OpenAI, or Gemini. Keys are validated live and encrypted at rest with Fernet — never logged, never sent to the browser.</p>
+              </div>
+            </Reveal>
+
+            {/* Graph — wide */}
+            <Reveal delay={80} className="md:col-span-2">
+              <div className="card-lift h-full rounded-3xl border border-hairline bg-surface-card p-7 sm:p-9 overflow-hidden relative">
+                <FeatureHead tint="var(--color-gradient-sky)" title="A living 3D knowledge graph" />
+                <p className="mt-3 text-body leading-relaxed max-w-md">Your memory as a weighted network. Nodes grow with connections, edges show supersedes and contradicts relationships — explore it all in an interactive 3D view.</p>
+                <GraphMini />
+              </div>
+            </Reveal>
+
+            {/* Sources */}
+            <Reveal>
+              <div className="card-lift h-full rounded-3xl border border-hairline bg-surface-card p-7">
+                <FeatureHead tint="var(--color-gradient-peach)" title="Ingest from anywhere" />
+                <div className="mt-4 flex flex-wrap gap-2">
+                  {SOURCES.map((s) => (
+                    <span key={s} className="px-3 py-1.5 rounded-full border border-hairline bg-surface-strong/50 text-[13px] font-medium text-body">{s}</span>
                   ))}
-                </ul>
+                </div>
               </div>
             </Reveal>
           </div>
         </div>
       </section>
 
-      {/* ══ LIFECYCLE ══ */}
-      <section id="lifecycle" className="px-4 md:px-6 py-24 border-t border-[var(--color-hairline)]">
-        <div className="mx-auto max-w-5xl">
-          <Reveal className="text-center max-w-2xl mx-auto mb-14">
-            <Kicker>The lifecycle</Kicker>
-            <h2 className="display-lg mb-4">Four operations. Total recall.</h2>
-            <p className="text-[var(--color-body)] leading-relaxed">
-              <span className="font-mono text-[13px]">remember</span> · <span className="font-mono text-[13px]">recall</span> · <span className="font-mono text-[13px]">improve</span> · <span className="font-mono text-[13px]">forget</span> — Cognee&apos;s hybrid graph-vector memory, wired end to end.
-            </p>
+      {/* ═══════ HOW IT WORKS ═══════ */}
+      <section id="how" className="px-5 sm:px-6 py-24 border-t border-hairline">
+        <div className="max-w-[1180px] mx-auto">
+          <Reveal className="max-w-2xl mb-14">
+            <p className="caption-upper text-muted">How it works</p>
+            <h2 className="display-lg mt-3">From raw context to a memory that maintains itself.</h2>
           </Reveal>
-
-          <div className="grid sm:grid-cols-2 gap-5">
-            {LIFECYCLE.map((s, i) => (
-              <Reveal key={s.op} delay={i * 80} className="group relative rounded-2xl border border-[var(--color-hairline)] bg-[var(--color-surface-card)] p-7 hover:border-[var(--color-hairline-strong)] transition-colors">
-                <div className="flex items-baseline justify-between mb-4">
-                  <span className="text-[40px] font-semibold leading-none" style={{ WebkitTextStroke: "1px var(--color-hairline-strong)", color: "transparent" }}>{s.n}</span>
-                  <code className="text-[13px] font-mono px-2.5 py-1 rounded-md bg-[var(--color-surface-strong)]" style={{ color: "var(--color-gradient-sky)" }}>{s.op}</code>
+          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-8">
+            {[
+              { n: "01", t: "Ingest", d: "Point Engram at a repo, PDF, article, video, or chat export. It extracts the meaning and structures it into the graph." },
+              { n: "02", t: "Reconcile", d: "New evidence is checked against what you already know. Contradictions surface instantly for a quick decision." },
+              { n: "03", t: "Recall", d: "Ask across every session. Answers are graph-grounded and time-aware — with a diff of what changed." },
+              { n: "04", t: "Decay", d: "Unreinforced beliefs fade and get pruned, so recall stays fast, lean, and trustworthy." },
+            ].map((s, i) => (
+              <Reveal key={s.n} delay={i * 90}>
+                <div className="relative">
+                  <div className="font-mono text-[13px] text-muted-soft">{s.n}</div>
+                  <div className="mt-3 h-px w-full bg-hairline relative">
+                    <span className="absolute -top-1 left-0 w-2 h-2 rounded-full" style={{ background: "var(--color-ink)" }} />
+                  </div>
+                  <h3 className="mt-5 text-lg font-semibold">{s.t}</h3>
+                  <p className="mt-2 text-[14px] text-body leading-relaxed">{s.d}</p>
                 </div>
-                <h3 className="text-lg font-semibold mb-2">{s.title}</h3>
-                <p className="text-[14px] text-[var(--color-body)] leading-relaxed">{s.body}</p>
               </Reveal>
             ))}
           </div>
         </div>
       </section>
 
-      {/* ══ MOCKUP + COPY ══ */}
-      <section className="px-4 md:px-6 py-24 border-t border-[var(--color-hairline)]">
-        <div className="mx-auto max-w-5xl grid md:grid-cols-2 gap-12 items-center">
+      {/* ═══════ FAQ ═══════ */}
+      <section id="faq" className="px-5 sm:px-6 py-24 border-t border-hairline">
+        <div className="max-w-[820px] mx-auto">
+          <Reveal className="text-center mb-12">
+            <p className="caption-upper text-muted">Questions</p>
+            <h2 className="display-lg mt-3">Good to know</h2>
+          </Reveal>
+          <div className="space-y-3">
+            {faqs.map((f, i) => (
+              <Reveal key={f.q} delay={i * 50}>
+                <FAQItem q={f.q} a={f.a} isOpen={openFaqIndex === i} onClick={() => setOpenFaqIndex(openFaqIndex === i ? null : i)} />
+              </Reveal>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ═══════ CTA BAND ═══════ */}
+      <section id="cta" className="px-5 sm:px-6 pb-24">
+        <div className="max-w-[1180px] mx-auto">
           <Reveal>
-            <Kicker>Reconciliation, in the open</Kicker>
-            <h2 className="display-md mb-4">You decide what still counts.</h2>
-            <p className="text-[var(--color-body)] leading-relaxed mb-6">
-              When new evidence collides with something you already believe, Engram surfaces both sides with their confidence scores and provenance. Keep the new fact, keep the old, or keep both as alternatives — every choice is logged to the timeline.
-            </p>
-            <button onClick={enter} className="inline-flex items-center gap-2 text-[14px] font-semibold" style={{ color: "var(--color-gradient-sky)" }}>
-              Try it live
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M13 6l6 6-6 6" /></svg>
-            </button>
-          </Reveal>
-          <Reveal delay={120}><ResolveMockup /></Reveal>
-        </div>
-      </section>
-
-      {/* ══ FEATURES BENTO ══ */}
-      <section id="features" className="px-4 md:px-6 py-24 border-t border-[var(--color-hairline)]">
-        <div className="mx-auto max-w-5xl">
-          <Reveal className="max-w-2xl mb-12">
-            <Kicker>Under the hood</Kicker>
-            <h2 className="display-lg">Everything a self-maintaining memory needs.</h2>
-          </Reveal>
-          <div className="grid md:grid-cols-3 gap-5">
-            {FEATURES.map((f, i) => (
-              <Reveal
-                key={f.title}
-                delay={(i % 3) * 80}
-                className={`rounded-2xl border border-[var(--color-hairline)] bg-[var(--color-surface-card)] p-7 ${f.span === "lg" ? "md:col-span-2" : ""}`}
-              >
-                <div className="w-10 h-10 rounded-xl mb-5 grid place-items-center" style={{ background: "color-mix(in srgb, var(--color-gradient-lavender) 14%, transparent)" }}>
-                  <span className="w-2.5 h-2.5 rounded-full" style={{ background: ACCENT }} />
-                </div>
-                <h3 className="text-[17px] font-semibold mb-2">{f.title}</h3>
-                <p className="text-[14px] text-[var(--color-body)] leading-relaxed">{f.body}</p>
-              </Reveal>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* ══ FAQ ══ */}
-      <section id="faq" className="px-4 md:px-6 py-24 border-t border-[var(--color-hairline)]">
-        <div className="mx-auto max-w-3xl">
-          <Reveal className="mb-10">
-            <Kicker>Questions</Kicker>
-            <h2 className="display-lg">Good to know.</h2>
-          </Reveal>
-          <div>
-            {FAQS.map((f, i) => (
-              <FaqRow key={i} q={f.q} a={f.a} open={openFaq === i} onToggle={() => setOpenFaq(openFaq === i ? null : i)} />
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* ══ FINAL CTA ══ */}
-      <section className="px-4 md:px-6 py-24 border-t border-[var(--color-hairline)]">
-        <Reveal className="relative mx-auto max-w-5xl rounded-3xl overflow-hidden p-[1px]" >
-          <div className="absolute inset-0" style={{ background: ACCENT, opacity: 0.6 }} />
-          <div className="relative rounded-[23px] bg-[var(--color-surface-card)] px-8 py-16 md:py-20 text-center">
-            <div className="pointer-events-none absolute inset-0 -z-0">
-              <div className="absolute left-1/2 top-0 -translate-x-1/2 w-[500px] h-[240px] rounded-full blur-[100px] opacity-[0.15]" style={{ background: ACCENT }} />
+            <div className="relative overflow-hidden rounded-[28px] bg-surface-dark text-on-dark px-8 sm:px-14 py-16 sm:py-20 text-center">
+              <div aria-hidden className="ambient-orb absolute -top-20 -left-10 w-72 h-72 rounded-full blur-[80px] opacity-25" style={{ background: "var(--color-gradient-lavender)" }} />
+              <div aria-hidden className="ambient-orb absolute -bottom-24 -right-10 w-80 h-80 rounded-full blur-[90px] opacity-20" style={{ background: "var(--color-gradient-sky)", animationDelay: "2s" }} />
+              <div className="relative">
+                <h2 className="display-xl">Give your AI a memory that lasts.</h2>
+                <p className="mt-5 text-[17px] text-on-dark-soft max-w-xl mx-auto leading-relaxed">Sign in with GitHub or Google and start building a knowledge graph that reconciles itself.</p>
+                <button onClick={enter} className="mt-9 inline-flex items-center gap-2 px-7 py-3.5 rounded-full bg-on-dark text-surface-dark text-[15px] font-semibold hover:opacity-90 transition-all hover:scale-[1.02] active:scale-95 cursor-pointer">
+                  {session ? "Open the app" : "Get started free"}
+                  <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M13 6l6 6-6 6" /></svg>
+                </button>
+              </div>
             </div>
-            <h2 className="relative display-lg mb-4">Ready to give your memory a spine?</h2>
-            <p className="relative text-[var(--color-body)] max-w-xl mx-auto mb-8">
-              Sign in with GitHub or Google, bring your own key, and start building a memory that keeps itself honest.
-            </p>
-            <button onClick={enter} className="relative inline-flex items-center gap-2 px-7 h-12 rounded-xl text-[15px] font-semibold text-[var(--color-on-primary)] cursor-pointer transition-transform hover:scale-[1.03]" style={{ background: ACCENT }}>
-              {session ? "Open your graph" : "Launch Engram"}
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M13 6l6 6-6 6" /></svg>
-            </button>
-          </div>
-        </Reveal>
+          </Reveal>
+        </div>
       </section>
 
-      {/* ══ FOOTER ══ */}
-      <footer className="px-4 md:px-6 py-12 border-t border-[var(--color-hairline)]">
-        <div className="mx-auto max-w-5xl flex flex-col md:flex-row items-center justify-between gap-6">
-          <div className="flex items-center gap-2">
+      {/* ═══════ FOOTER ═══════ */}
+      <footer className="px-5 sm:px-6 py-14 border-t border-hairline">
+        <div className="max-w-[1180px] mx-auto flex flex-col md:flex-row items-center justify-between gap-6">
+          <div className="flex items-center gap-2.5">
             <Image src="/logo.png" alt="Engram" width={26} height={26} className="object-contain rounded-md" />
             <span className="text-[16px] font-semibold tracking-tight">Engram</span>
           </div>
-          <div className="flex items-center gap-6 text-[13px] text-[var(--color-muted)]">
-            <a href={REPO_URL} target="_blank" rel="noreferrer" className="hover:text-[var(--color-ink)] transition-colors">GitHub</a>
-            <a href={`${REPO_URL}/blob/main/README.md`} target="_blank" rel="noreferrer" className="hover:text-[var(--color-ink)] transition-colors">Docs</a>
-            <a href="https://cognee.ai" target="_blank" rel="noreferrer" className="hover:text-[var(--color-ink)] transition-colors">Powered by Cognee</a>
+          <div className="flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-[14px] text-body">
+            <a href="https://github.com/Aditya060806/Engram" target="_blank" rel="noreferrer" className="hover:text-ink transition-colors">Repository</a>
+            <a href="https://github.com/Aditya060806/Engram/blob/main/README.md" target="_blank" rel="noreferrer" className="hover:text-ink transition-colors">Documentation</a>
+            <a href="https://cognee.ai" target="_blank" rel="noreferrer" className="hover:text-ink transition-colors">Powered by Cognee</a>
           </div>
-          <p className="text-[12px] text-[var(--color-muted)]">
-            Built by <a href="https://github.com/Aditya060806" target="_blank" rel="noreferrer" className="underline decoration-dotted underline-offset-4 hover:text-[var(--color-ink)]">Aditya Pandey</a>
-          </p>
+        </div>
+        <div className="max-w-[1180px] mx-auto mt-10 pt-6 border-t border-hairline flex flex-col sm:flex-row items-center justify-between gap-3 text-[13px] text-muted">
+          <p>© 2026 Engram. Built for the WeMakeDevs × Cognee Hackathon.</p>
+          <p>Developed by <a href="https://github.com/Aditya060806" target="_blank" rel="noreferrer" className="text-body hover:text-ink transition-colors underline decoration-dotted underline-offset-4">Aditya Pandey</a></p>
         </div>
       </footer>
+    </div>
+  );
+}
+
+/* ══════════════ Presentational sub-components ══════════════ */
+
+function ThemeIcon({ isDark }: { isDark: boolean }) {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      {isDark ? (
+        <>
+          <circle cx="12" cy="12" r="5" />
+          <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42" />
+        </>
+      ) : (
+        <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+      )}
+    </svg>
+  );
+}
+
+function Stat({ label, value, loaded, suffix = "" }: { label: string; value: number; loaded: boolean; suffix?: string }) {
+  return (
+    <div className="text-center md:text-left">
+      <div className="display-md tabular-nums">
+        {loaded ? <CountUp value={value} suffix={suffix} /> : <span className="text-muted-soft">—</span>}
+      </div>
+      <div className="mt-1.5 text-[13px] text-muted">{label}</div>
+    </div>
+  );
+}
+
+function AppFrame({ children, url }: { children: React.ReactNode; url: string }) {
+  return (
+    <div className="w-full rounded-2xl border border-hairline bg-surface-card shadow-[0_24px_70px_-24px_rgba(0,0,0,0.28)] overflow-hidden">
+      <div className="flex items-center gap-2 px-4 py-3 border-b border-hairline bg-surface-strong/60 select-none">
+        <span className="w-2.5 h-2.5 rounded-full bg-[#ef4444]/50" />
+        <span className="w-2.5 h-2.5 rounded-full bg-[#eab308]/50" />
+        <span className="w-2.5 h-2.5 rounded-full bg-[#22c55e]/50" />
+        <div className="ml-3 flex-1 max-w-[280px] h-5 rounded-md border border-hairline bg-canvas/60 px-3 flex items-center text-[10px] font-mono text-muted overflow-hidden text-ellipsis whitespace-nowrap">
+          {url}
+        </div>
+      </div>
+      <div className="bg-surface-card">{children}</div>
+    </div>
+  );
+}
+
+function ReconciliationDemo() {
+  return (
+    <div className="flex">
+      {/* mini sidebar */}
+      <div className="hidden sm:flex flex-col w-44 shrink-0 border-r border-hairline p-4 gap-1">
+        <div className="flex items-center gap-2 mb-3 px-1">
+          <Image src="/logo.png" alt="" width={18} height={18} className="object-contain rounded" />
+          <span className="text-[13px] font-semibold">Engram</span>
+        </div>
+        {[
+          { t: "Graph", a: false },
+          { t: "Recap", a: false },
+          { t: "Ingest", a: false },
+          { t: "Resolve", a: true },
+          { t: "Ask", a: false },
+        ].map((n) => (
+          <div key={n.t} className={`px-3 py-1.5 rounded-lg text-[12px] font-medium ${n.a ? "bg-surface-strong text-ink" : "text-muted"}`}>{n.t}</div>
+        ))}
+      </div>
+      {/* content */}
+      <div className="flex-1 p-5 sm:p-6">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h3 className="text-[15px] font-semibold">Resolve contradictions</h3>
+            <p className="text-[12px] text-muted mt-0.5">Factual conflicts (2 active)</p>
+          </div>
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold" style={{ background: "color-mix(in srgb, var(--color-conflict-warning) 16%, transparent)", color: "var(--color-conflict-warning)" }}>
+            <span className="w-1.5 h-1.5 rounded-full bg-current" /> 2 pending
+          </span>
+        </div>
+        <div className="rounded-xl border border-hairline p-4">
+          <div className="text-[12px] font-semibold text-muted mb-3">Conflict · &ldquo;Database choice&rdquo;</div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="rounded-lg border border-hairline bg-surface-strong/40 p-3">
+              <div className="text-[11px] caption-upper text-muted mb-1.5">Old belief</div>
+              <div className="text-[13px] font-medium text-ink">postgres</div>
+              <div className="text-[11px] text-muted mt-1">project_spec.md · 2023-10-15</div>
+            </div>
+            <div className="rounded-lg border p-3" style={{ borderColor: "color-mix(in srgb, var(--color-semantic-success) 40%, transparent)", background: "color-mix(in srgb, var(--color-semantic-success) 8%, transparent)" }}>
+              <div className="text-[11px] caption-upper mb-1.5" style={{ color: "var(--color-semantic-success)" }}>New evidence</div>
+              <div className="text-[13px] font-medium text-ink">supabase</div>
+              <div className="text-[11px] text-muted mt-1">adr_v4.pdf · 2023-11-20</div>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 mt-4">
+            <span className="px-3 py-1.5 rounded-lg border border-hairline text-[12px] font-medium text-body">Keep old</span>
+            <span className="px-3 py-1.5 rounded-lg text-[12px] font-semibold bg-ink text-canvas">Keep new</span>
+            <span className="px-3 py-1.5 rounded-lg border border-hairline text-[12px] font-medium text-body">Keep both</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function FeatureHead({ title, tint }: { title: string; tint: string }) {
+  return (
+    <div className="flex items-center gap-2.5">
+      <span className="w-2 h-2 rounded-full" style={{ background: tint }} />
+      <h3 className="text-[17px] font-semibold text-ink">{title}</h3>
+    </div>
+  );
+}
+
+function ConflictRow() {
+  return (
+    <div className="rounded-2xl border border-hairline bg-surface-strong/40 p-4 flex flex-col sm:flex-row items-stretch gap-3">
+      <div className="flex-1 rounded-xl bg-surface-card border border-hairline p-3">
+        <div className="text-[11px] caption-upper text-muted mb-1">Old belief</div>
+        <div className="text-[13px] font-medium line-through decoration-[var(--color-muted-soft)] text-muted">Deploys are weekly</div>
+      </div>
+      <div className="flex items-center justify-center text-muted-soft">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M13 6l6 6-6 6" /></svg>
+      </div>
+      <div className="flex-1 rounded-xl bg-surface-card p-3" style={{ border: "1px solid color-mix(in srgb, var(--color-semantic-success) 40%, transparent)" }}>
+        <div className="text-[11px] caption-upper mb-1" style={{ color: "var(--color-semantic-success)" }}>Now active</div>
+        <div className="text-[13px] font-medium text-ink">Deploys are on every merge</div>
+      </div>
+    </div>
+  );
+}
+
+function DecayBar({ label, value, tint }: { label: string; value: number; tint: string }) {
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-1.5">
+        <span className="font-mono text-[12px] text-body">{label}</span>
+        <span className="font-mono text-[12px] font-semibold" style={{ color: tint }}>{value.toFixed(2)}</span>
+      </div>
+      <div className="h-2 rounded-full bg-surface-strong overflow-hidden">
+        <div className="h-full rounded-full transition-[width] duration-1000 ease-out" style={{ width: `${value * 100}%`, background: tint }} />
+      </div>
+    </div>
+  );
+}
+
+function GraphMini() {
+  const nodes = [
+    { cx: 60, cy: 70, r: 10 }, { cx: 140, cy: 40, r: 7 }, { cx: 210, cy: 90, r: 13 },
+    { cx: 120, cy: 120, r: 6 }, { cx: 280, cy: 50, r: 8 }, { cx: 260, cy: 130, r: 6 },
+  ];
+  const edges = [[0, 1], [0, 3], [1, 2], [2, 4], [2, 5], [1, 3]];
+  return (
+    <svg viewBox="0 0 340 170" className="mt-6 w-full max-w-md opacity-90" aria-hidden>
+      {edges.map(([a, b], i) => (
+        <line key={i} x1={nodes[a].cx} y1={nodes[a].cy} x2={nodes[b].cx} y2={nodes[b].cy} stroke="var(--color-hairline-strong)" strokeWidth="1" />
+      ))}
+      {nodes.map((n, i) => (
+        <circle key={i} cx={n.cx} cy={n.cy} r={n.r} fill="var(--color-ink)" opacity={0.85} className="source-float" style={{ animationDelay: `${i * 0.4}s`, transformBox: "fill-box", transformOrigin: "center" }} />
+      ))}
+    </svg>
+  );
+}
+
+function FAQItem({ q, a, isOpen, onClick }: { q: string; a: string; isOpen: boolean; onClick: () => void }) {
+  return (
+    <div className="rounded-2xl border border-hairline bg-surface-card overflow-hidden">
+      <button onClick={onClick} className="w-full flex items-center justify-between gap-4 p-5 sm:p-6 text-left cursor-pointer">
+        <span className="text-[15px] sm:text-base font-medium text-ink">{q}</span>
+        <svg className={`w-5 h-5 shrink-0 text-muted transition-transform duration-300 ${isOpen ? "rotate-180" : ""}`} fill="none" stroke="currentColor" strokeWidth="1.6" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" /></svg>
+      </button>
+      <div className={`grid transition-all duration-300 ease-out ${isOpen ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"}`}>
+        <div className="overflow-hidden">
+          <p className="px-5 sm:px-6 pb-6 text-[14px] text-body leading-relaxed">{a}</p>
+        </div>
+      </div>
     </div>
   );
 }
