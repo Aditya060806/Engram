@@ -415,8 +415,8 @@ export default function LandingPage() {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             {/* Source types — sphere card */}
             <Reveal className="md:col-span-2">
-              <div className="card-lift relative h-full rounded-3xl border border-hairline bg-surface-card p-7 sm:p-9 overflow-hidden">
-                <div aria-hidden className="absolute -right-10 -top-6 w-72 h-72 opacity-[0.10] pointer-events-none">
+              <div className="card-lift group relative h-full rounded-3xl border border-hairline bg-surface-card p-7 sm:p-9 overflow-hidden">
+                <div aria-hidden className="absolute -right-10 -top-6 w-72 h-72 opacity-[0.10] pointer-events-none transition-transform duration-700 group-hover:rotate-45">
                   <Image src="/images/capabilities-sphere.webp" alt="" fill sizes="288px" className="object-contain" />
                 </div>
                 <div className="relative">
@@ -424,22 +424,23 @@ export default function LandingPage() {
                   <h3 className="mt-5 text-lg font-semibold">Five source types, natively</h3>
                   <p className="mt-2.5 text-body leading-relaxed max-w-md">Ingests PDFs, GitHub repositories, ChatGPT and Claude exports, YouTube transcripts, and web articles, with your chat turns remembered as you go.</p>
                   <div className="mt-5 flex flex-wrap gap-2">
-                    {[Ic.github, Ic.pdf, Ic.notion, Ic.youtube, Ic.web].map((ic, i) => (<span key={i} className="w-9 h-9 rounded-lg border border-hairline bg-surface-strong/50 flex items-center justify-center text-body">{ic}</span>))}
+                    {[Ic.github, Ic.pdf, Ic.notion, Ic.youtube, Ic.web].map((ic, i) => (<span key={i} className="tap-sm w-9 h-9 rounded-lg border border-hairline bg-surface-strong/50 flex items-center justify-center text-body hover:text-ink hover:border-hairline-strong hover:-translate-y-0.5 transition-all">{ic}</span>))}
                   </div>
                 </div>
               </div>
             </Reveal>
             {/* Reconciliation */}
             <Reveal delay={80}>
-              <div className="card-lift h-full rounded-3xl border border-hairline bg-surface-card p-7">
+              <div className="card-lift group h-full rounded-3xl border border-hairline bg-surface-card p-7">
                 <IconChip tint={T.amber}>{Ic.merge}</IconChip>
                 <h3 className="mt-5 text-lg font-semibold">Reconciliation engine</h3>
                 <p className="mt-2.5 text-body leading-relaxed">Validates every new belief against your graph in under two seconds using schema-level contradiction checks.</p>
+                <ScanReconcile />
               </div>
             </Reveal>
             {/* Decay */}
             <Reveal>
-              <div className="card-lift h-full rounded-3xl border border-hairline bg-surface-card p-7">
+              <div className="card-lift group h-full rounded-3xl border border-hairline bg-surface-card p-7">
                 <IconChip tint={T.rose}>{Ic.clock}</IconChip>
                 <h3 className="mt-5 text-lg font-semibold">Time-aware decay</h3>
                 <p className="mt-2.5 text-body leading-relaxed">Confidence decays continuously and unreinforced nodes are pruned once they drop below the threshold.</p>
@@ -451,42 +452,50 @@ export default function LandingPage() {
             </Reveal>
             {/* Graph — wide */}
             <Reveal delay={80} className="md:col-span-2">
-              <div className="card-lift relative h-full rounded-3xl border border-hairline bg-surface-card p-7 sm:p-9 overflow-hidden">
+              <div className="card-lift group relative h-full rounded-3xl border border-hairline bg-surface-card p-7 sm:p-9 overflow-hidden">
                 <IconChip tint={T.sky}>{Ic.graph}</IconChip>
                 <h3 className="mt-5 text-lg font-semibold">A living 3D knowledge graph</h3>
                 <p className="mt-2.5 text-body leading-relaxed max-w-md">A force-directed visualizer maps your memory as a weighted network. Nodes grow with connections; edges show supersedes and contradicts, with real-time provenance tracing.</p>
+                <p className="mt-2 text-[12px] text-muted-soft">Hover a node to trace its connections.</p>
                 <GraphMini />
               </div>
             </Reveal>
             {/* Temporal */}
             <Reveal>
-              <div className="card-lift h-full rounded-3xl border border-hairline bg-surface-card p-7">
+              <div className="card-lift group h-full rounded-3xl border border-hairline bg-surface-card p-7">
                 <IconChip tint={T.sky}>{Ic.diff}</IconChip>
                 <h3 className="mt-5 text-lg font-semibold">Temporal diffs</h3>
                 <p className="mt-2.5 text-body leading-relaxed">Ask what changed since March and get a diff of added nodes, superseded beliefs, and new decisions.</p>
+                <div data-stagger className="mt-5 space-y-1.5 font-mono text-[11.5px] rounded-xl border border-hairline bg-surface-strong/30 p-3">
+                  <div className="flex items-center gap-2" style={{ ["--stagger-index" as string]: 0 }}><span style={{ color: T.mint }}>+</span><span className="text-body">deploys on every merge</span></div>
+                  <div className="flex items-center gap-2" style={{ ["--stagger-index" as string]: 1 }}><span style={{ color: T.rose }}>−</span><span className="text-muted line-through">weekly deploys</span></div>
+                  <div className="flex items-center gap-2" style={{ ["--stagger-index" as string]: 2 }}><span style={{ color: T.sky }}>~</span><span className="text-body">memory → Cognee Cloud</span></div>
+                </div>
               </div>
             </Reveal>
             {/* Recap — wide */}
             <Reveal delay={80} className="md:col-span-2">
-              <div className="card-lift h-full rounded-3xl border border-hairline bg-surface-card p-7 sm:p-9 flex flex-col sm:flex-row sm:items-center gap-6 justify-between">
+              <div className="card-lift group h-full rounded-3xl border border-hairline bg-surface-card p-7 sm:p-9 flex flex-col sm:flex-row sm:items-center gap-6 justify-between">
                 <div className="max-w-lg">
                   <IconChip tint={T.lavender}>{Ic.clock}</IconChip>
                   <h3 className="mt-5 text-lg font-semibold">The Recap: where is my context?</h3>
                   <p className="mt-2.5 text-body leading-relaxed">A morning-after digest of your memory. For any window, Engram stitches every lifecycle operation into one grounded narrative.</p>
                 </div>
-                <div className="shrink-0 rounded-2xl border border-hairline bg-surface-strong/60 px-5 py-4 text-center self-start sm:self-auto">
+                <div className="shrink-0 rounded-2xl border border-hairline bg-surface-strong/60 px-6 py-5 text-center self-start sm:self-auto">
                   <div className="text-[11px] caption-upper text-muted">last 7 days</div>
                   <div className="display-md mt-1"><CountUp value={12} prefix="+" /></div>
                   <div className="text-[12px] text-muted">memories reconciled</div>
+                  <Sparkline />
                 </div>
               </div>
             </Reveal>
             {/* BYOK */}
             <Reveal>
-              <div className="card-lift h-full rounded-3xl border border-hairline bg-surface-card p-7">
+              <div className="card-lift group h-full rounded-3xl border border-hairline bg-surface-card p-7">
                 <IconChip tint={T.mint}>{Ic.key}</IconChip>
                 <h3 className="mt-5 text-lg font-semibold">Bring your own key</h3>
                 <p className="mt-2.5 text-body leading-relaxed">Connect Groq, OpenAI, or Gemini. Keys are validated live and encrypted at rest with Fernet.</p>
+                <ProviderChips />
               </div>
             </Reveal>
           </div>
@@ -661,7 +670,50 @@ export default function LandingPage() {
 /* ══════════════ Sub-components ══════════════ */
 
 function IconChip({ tint, children }: { tint: string; children: React.ReactNode }) {
-  return <div className="w-11 h-11 rounded-xl flex items-center justify-center" style={chip(tint)}>{children}</div>;
+  return <div className="w-11 h-11 rounded-xl flex items-center justify-center transition-transform duration-300 group-hover:scale-110 group-hover:-rotate-6" style={chip(tint)}>{children}</div>;
+}
+
+function ProviderChips() {
+  const items = [{ n: "Groq", t: T.peach }, { n: "OpenAI", t: T.mint }, { n: "Gemini", t: T.sky }];
+  return (
+    <div className="mt-5 flex flex-wrap gap-2">
+      {items.map((p) => (
+        <span key={p.n} className="tap-sm inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-hairline bg-surface-strong/40 text-[12px] font-medium text-body transition-colors hover:text-ink hover:border-hairline-strong">
+          <span className="w-1.5 h-1.5 rounded-full" style={{ background: p.t }} />{p.n}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function ScanReconcile() {
+  return (
+    <div className="mt-5 relative rounded-xl border border-hairline bg-surface-strong/30 p-3 overflow-hidden">
+      <div className="scan-line" aria-hidden />
+      <div className="relative flex items-center justify-between gap-2 text-[11px]">
+        <span className="px-2 py-1 rounded-md bg-surface-card border border-hairline text-muted line-through">weekly deploys</span>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="text-muted-soft shrink-0"><path d="M5 12h14M13 6l6 6-6 6" /></svg>
+        <span className="px-2 py-1 rounded-md bg-surface-card border text-ink" style={{ borderColor: `color-mix(in srgb, ${T.mint} 50%, transparent)` }}>on every merge</span>
+      </div>
+      <div className="relative mt-2.5 flex items-center gap-1.5 text-[11px] font-semibold" style={{ color: T.mint }}>
+        <span className="w-4 h-4 rounded-full flex items-center justify-center" style={{ background: T.mint, color: "var(--color-canvas)" }}>
+          <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 13l4 4L19 7" /></svg>
+        </span>
+        Reconciled in 1.8s
+      </div>
+    </div>
+  );
+}
+
+function Sparkline() {
+  const bars = [30, 55, 25, 70, 45, 82, 60];
+  return (
+    <div className="flex items-end gap-1 h-8 mt-2 justify-center">
+      {bars.map((b, i) => (
+        <span key={i} className="w-1.5 rounded-full bg-ink/70" style={{ height: `${b}%`, transformOrigin: "bottom", animation: `grow-bar 0.7s cubic-bezier(0.22,1,0.36,1) ${i * 0.07}s both` }} />
+      ))}
+    </div>
+  );
 }
 
 function FooterCol({ title, links, onNav }: {
@@ -1042,21 +1094,68 @@ function Provider({ className, src, label }: { className: string; src: string; l
 }
 
 function DecayBar({ label, value, strong }: { label: string; value: number; strong: boolean }) {
+  const [w, setW] = useState(0);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const io = new IntersectionObserver(([e]) => { if (e.isIntersecting) { setW(value); io.disconnect(); } }, { threshold: 0.4 });
+    io.observe(el);
+    return () => io.disconnect();
+  }, [value]);
+  const pruned = value < 0.2;
   return (
-    <div>
-      <div className="flex items-center justify-between mb-1.5"><span className="font-mono text-[12px] text-body">{label}</span><span className={`font-mono text-[12px] font-semibold ${strong ? "text-ink" : "text-muted-soft"}`}>{value.toFixed(2)}</span></div>
-      <div className="h-2 rounded-full bg-surface-strong overflow-hidden"><div className="h-full rounded-full transition-[width] duration-1000 ease-out" style={{ width: `${value * 100}%`, background: strong ? T.mint : T.rose }} /></div>
+    <div ref={ref}>
+      <div className="flex items-center justify-between mb-1.5">
+        <span className="font-mono text-[12px] text-body flex items-center gap-1.5">
+          {label}
+          {pruned && <span className="px-1.5 py-0.5 rounded text-[9px] font-semibold uppercase tracking-wide" style={chip(T.rose)}>pruned</span>}
+        </span>
+        <span className={`font-mono text-[12px] font-semibold ${strong ? "text-ink" : "text-muted-soft"}`}>{value.toFixed(2)}</span>
+      </div>
+      <div className="h-2 rounded-full bg-surface-strong overflow-hidden">
+        <div className="h-full rounded-full transition-[width] duration-[1200ms] ease-out" style={{ width: `${w * 100}%`, background: strong ? T.mint : T.rose }} />
+      </div>
     </div>
   );
 }
 
+const GRAPH_NODES = [
+  { x: 62, y: 72, r: 11, label: "Cognee" },
+  { x: 142, y: 40, r: 7, label: "Auth" },
+  { x: 212, y: 92, r: 13, label: "Deploy" },
+  { x: 120, y: 124, r: 6, label: "PDF" },
+  { x: 282, y: 48, r: 8, label: "Repo" },
+  { x: 262, y: 132, r: 6, label: "Recap" },
+];
+const GRAPH_EDGES: [number, number][] = [[0, 1], [0, 3], [1, 2], [2, 4], [2, 5], [1, 3]];
 function GraphMini() {
-  const nodes = [{ cx: 60, cy: 70, r: 10 }, { cx: 140, cy: 40, r: 7 }, { cx: 210, cy: 90, r: 13 }, { cx: 120, cy: 120, r: 6 }, { cx: 280, cy: 50, r: 8 }, { cx: 260, cy: 130, r: 6 }];
-  const edges = [[0, 1], [0, 3], [1, 2], [2, 4], [2, 5], [1, 3]];
+  const [hover, setHover] = useState<number | null>(null);
   return (
-    <svg viewBox="0 0 340 170" className="mt-6 w-full max-w-md opacity-90" aria-hidden>
-      {edges.map(([a, b], i) => (<line key={i} x1={nodes[a].cx} y1={nodes[a].cy} x2={nodes[b].cx} y2={nodes[b].cy} stroke="var(--color-hairline-strong)" strokeWidth="1" />))}
-      {nodes.map((n, i) => (<circle key={i} cx={n.cx} cy={n.cy} r={n.r} fill="var(--color-ink)" opacity={0.85} className="float-y" style={{ animationDelay: `${i * 0.4}s`, transformBox: "fill-box", transformOrigin: "center" }} />))}
+    <svg viewBox="0 0 340 170" className="mt-6 w-full max-w-md overflow-visible" onMouseLeave={() => setHover(null)}>
+      {GRAPH_EDGES.map(([a, b], i) => {
+        const active = hover === null || hover === a || hover === b;
+        return (
+          <line
+            key={i}
+            x1={GRAPH_NODES[a].x} y1={GRAPH_NODES[a].y} x2={GRAPH_NODES[b].x} y2={GRAPH_NODES[b].y}
+            stroke={active ? "var(--color-ink)" : "var(--color-hairline-strong)"}
+            strokeWidth={active ? 1.4 : 1}
+            opacity={active ? 0.85 : 0.3}
+            strokeLinecap="round"
+            style={{ transition: "stroke 0.3s, opacity 0.3s, stroke-width 0.3s", strokeDasharray: 220, animation: `draw-edge 1s ease ${i * 0.12}s both` }}
+          />
+        );
+      })}
+      {GRAPH_NODES.map((n, i) => {
+        const connected = hover === null || hover === i || GRAPH_EDGES.some(([a, b]) => (a === hover && b === i) || (b === hover && a === i));
+        return (
+          <g key={i} onMouseEnter={() => setHover(i)} style={{ cursor: "pointer" }}>
+            <circle cx={n.x} cy={n.y} r={n.r} fill="var(--color-ink)" opacity={connected ? 0.9 : 0.28} className="float-y" style={{ transition: "opacity 0.3s", transformBox: "fill-box", transformOrigin: "center", animationDelay: `${i * 0.4}s` }} />
+            {hover === i && <text x={n.x} y={n.y - n.r - 6} textAnchor="middle" style={{ fontSize: 9, fontWeight: 600, fill: "var(--color-ink)" }}>{n.label}</text>}
+          </g>
+        );
+      })}
     </svg>
   );
 }
