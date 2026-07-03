@@ -600,20 +600,23 @@ function IconChip({ tint, children }: { tint: string; children: React.ReactNode 
 }
 
 function MarqueeRow({ items, duration, reverse = false }: { items: MItem[]; duration: number; reverse?: boolean }) {
-  const doubled = [...items, ...items];
+  // Repeat items enough that a single copy is wider than any viewport, so the lane never shows a gap.
+  const group = Array.from({ length: 4 }).flatMap(() => items);
+  const pill = (it: MItem, i: number) => (
+    <span
+      key={i}
+      className="tap-sm shrink-0 inline-flex items-center gap-2 pl-2 pr-4 py-1.5 rounded-full border border-hairline bg-surface-card text-[13px] font-medium text-body hover:text-ink hover:border-hairline-strong hover:shadow-[0_8px_24px_-12px_rgba(0,0,0,0.28)] transition-all duration-200"
+    >
+      <span className="w-6 h-6 rounded-full flex items-center justify-center shrink-0" style={chip(it.tint)}>
+        {it.img ? <Image src={it.img} alt="" width={13} height={13} className="object-contain" /> : it.icon}
+      </span>
+      {it.label}
+    </span>
+  );
   return (
-    <div className={`marquee-track gap-3 ${reverse ? "reverse" : ""}`} style={{ animationDuration: `${duration}s` }}>
-      {doubled.map((it, i) => (
-        <span
-          key={i}
-          className="tap-sm shrink-0 inline-flex items-center gap-2 pl-2 pr-4 py-1.5 rounded-full border border-hairline bg-surface-card text-[13px] font-medium text-body hover:text-ink hover:border-hairline-strong hover:shadow-[0_8px_24px_-12px_rgba(0,0,0,0.28)] transition-all duration-200"
-        >
-          <span className="w-6 h-6 rounded-full flex items-center justify-center shrink-0" style={chip(it.tint)}>
-            {it.img ? <Image src={it.img} alt="" width={13} height={13} className="object-contain" /> : it.icon}
-          </span>
-          {it.label}
-        </span>
-      ))}
+    <div className={`marquee-track ${reverse ? "reverse" : ""}`} style={{ animationDuration: `${duration}s` }}>
+      <div className="marquee-group">{group.map(pill)}</div>
+      <div className="marquee-group" aria-hidden>{group.map(pill)}</div>
     </div>
   );
 }

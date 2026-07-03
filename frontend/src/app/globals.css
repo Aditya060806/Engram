@@ -566,6 +566,15 @@ html.theme-transition *::after {
   width: max-content;
   animation: marquee 30s linear infinite;
 }
+/* Each group is one full copy; two identical groups sit flush so translateX(-50%)
+   lands exactly on a copy boundary. Gap + trailing padding keep spacing uniform
+   across the seam, and repeating the items makes each copy wider than any viewport. */
+.marquee-group {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding-right: 0.75rem;
+}
 .marquee-track:hover { animation-play-state: paused; }
 @keyframes marquee {
   to { transform: translateX(-50%); }
