@@ -1,5 +1,6 @@
 import os
 import time
+import hmac
 import asyncio
 from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from metrics import record as record_metric, summary as metrics_summary
@@ -15,7 +16,12 @@ from database import (
     db_save_user_ai_config,
     db_get_user_ai_config,
     db_delete_user_ai_config,
+    db_save_conversation,
+    db_list_conversations,
+    db_get_conversation,
+    db_delete_conversation,
 )
+import json as _json
 from models import (
     IngestRequest,
     RecallRequest,
@@ -60,22 +66,30 @@ from services import (
     run_memory_improve,
 )
 
-limiter = Limiter(key_func=get_remote_address)
+def _rate_limit_key(request: Request) -> str:
+    # Behind the Vercel proxy every user shares an egress IP, so keying on the IP
+    # puts all users in one bucket. Prefer the per-user id when present.
+    return request.headers.get("X-User-Id") or get_remote_address(request)
+
+
+limiter = Limiter(key_func=_rate_limit_key)
 
 async def verify_llm_authorization(x_engram_key: str = Header(None), x_user_id: str = Header(default="")):
     secret = os.environ.get("ENGRAM_ACCESS_KEY")
     is_dev = os.environ.get("ENVIRONMENT", "production") == "development"
 
-    # In dev mode, allow requests with a user ID (from the proxy)
-    if is_dev and x_user_id:
+    # Dev convenience bypass: only when NO access key is configured. If a key is
+    # set (as in any deployed environment), it is always required even if
+    # ENVIRONMENT is mistakenly left as "development", so this cannot open a hole.
+    if is_dev and x_user_id and not secret:
         return
 
     # In production, always require the access key
     if not secret:
         raise HTTPException(status_code=500, detail="Server misconfigured: Access keys not configured")
 
-    allowed_keys = {k for k in (secret,) if k}
-    if x_engram_key not in allowed_keys:
+    # Constant-time comparison to avoid leaking the key via timing side-channels.
+    if not x_engram_key or not hmac.compare_digest(x_engram_key, secret):
         raise HTTPException(status_code=403, detail="Access key required.")
 
 app = FastAPI(
@@ -297,14 +311,12 @@ async def nodes_search(q: str = "", _auth=Depends(verify_llm_authorization)):
 
 @app.post("/forget/node")
 async def forget_node_endpoint(req: ForgetNodeRequest, _auth=Depends(verify_llm_authorization)):
-    await forget_node(req.nodeId)
-    return {"status": "ok"}
+    return await forget_node(req.nodeId)
 
 
 @app.post("/forget/source")
 async def forget_source_endpoint(req: ForgetSourceRequest, _auth=Depends(verify_llm_authorization)):
-    await forget_source(req.sourceId)
-    return {"status": "ok"}
+    return await forget_source(req.sourceId)
 
 
 @app.post("/reset-demo")
@@ -321,6 +333,44 @@ async def cognee_graph_status(_auth=Depends(verify_llm_authorization)):
 @app.get("/review")
 async def review_candidates(limit: int = 10, _auth=Depends(verify_llm_authorization)):
     return await get_review_candidates(limit)
+
+
+class ConversationSaveRequest(BaseModel):
+    convId: str = Field(..., max_length=100)
+    title: str = Field(..., max_length=300)
+    messages: list = Field(default_factory=list)
+
+
+@app.get("/chat/conversations")
+async def chat_conversations_list(_auth=Depends(verify_llm_authorization)):
+    return await asyncio.to_thread(db_list_conversations)
+
+
+@app.get("/chat/conversations/{conv_id}")
+async def chat_conversation_get(conv_id: str, _auth=Depends(verify_llm_authorization)):
+    raw = await asyncio.to_thread(db_get_conversation, conv_id)
+    if raw is None:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    try:
+        messages = _json.loads(raw)
+    except (ValueError, TypeError):
+        messages = []
+    return {"id": conv_id, "messages": messages}
+
+
+@app.post("/chat/conversations")
+async def chat_conversation_save(req: ConversationSaveRequest, _auth=Depends(verify_llm_authorization)):
+    payload = _json.dumps(req.messages)
+    if len(payload) > 2_000_000:
+        raise HTTPException(status_code=413, detail="Conversation too large")
+    await asyncio.to_thread(db_save_conversation, req.convId, req.title, payload)
+    return {"status": "ok"}
+
+
+@app.delete("/chat/conversations/{conv_id}")
+async def chat_conversation_delete(conv_id: str, _auth=Depends(verify_llm_authorization)):
+    await asyncio.to_thread(db_delete_conversation, conv_id)
+    return {"status": "ok"}
 
 
 @app.get("/cognee/activity")
