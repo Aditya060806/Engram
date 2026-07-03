@@ -749,25 +749,98 @@ function AppFrame({ children, url }: { children: React.ReactNode; url: string })
   );
 }
 
-function ReconciliationDemo() {
+const DEMO_CONFLICTS = [
+  { topic: "memory backend", oldV: "local SQLite store", oldSrc: "setup_notes.md", oldDate: "Jun 24", newV: "Cognee Cloud tenant", newSrc: "adr_cloud.md", newDate: "Jul 1" },
+  { topic: "answer engine", oldV: "LLM-generated replies", oldSrc: "recall_v1.md", oldDate: "Jun 26", newV: "Cognee graph-completion", newSrc: "recall_v2.md", newDate: "Jul 3" },
+  { topic: "deployment", oldV: "single combined app", oldSrc: "deploy_v1.md", oldDate: "Jun 28", newV: "Vercel web + Render API", newSrc: "deploy_v2.md", newDate: "Jul 2" },
+  { topic: "sign-in", oldV: "email and password", oldSrc: "auth_draft.md", oldDate: "Jun 25", newV: "GitHub and Google OAuth", newSrc: "auth_final.md", newDate: "Jun 30" },
+];
+
+function ResolveCheck({ tint = "var(--color-ink)" }: { tint?: string }) {
   return (
-    <div className="flex">
+    <span className="inline-flex items-center justify-center w-4 h-4 rounded-full" style={{ background: tint, color: "var(--color-canvas)" }}>
+      <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 13l4 4L19 7" /></svg>
+    </span>
+  );
+}
+
+function ReconciliationDemo() {
+  const [idx, setIdx] = useState(0);
+  const [choice, setChoice] = useState<null | "old" | "new" | "both">(null);
+  const pausedRef = useRef(false);
+  const advanceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const c = DEMO_CONFLICTS[idx];
+
+  const goNext = () => {
+    setChoice(null);
+    setIdx((i) => (i + 1) % DEMO_CONFLICTS.length);
+  };
+
+  const resolve = (ch: "old" | "new" | "both") => {
+    if (choice) return;
+    setChoice(ch);
+    if (advanceRef.current) clearTimeout(advanceRef.current);
+    advanceRef.current = setTimeout(goNext, 1250);
+  };
+
+  useEffect(() => {
+    const t = setInterval(() => {
+      if (pausedRef.current || choice) return;
+      goNext();
+    }, 4600);
+    return () => clearInterval(t);
+  }, [choice]);
+
+  useEffect(() => () => { if (advanceRef.current) clearTimeout(advanceRef.current); }, []);
+
+  const oldChosen = choice === "old" || choice === "both";
+  const newChosen = choice === "new" || choice === "both";
+
+  return (
+    <div className="flex" onMouseEnter={() => { pausedRef.current = true; }} onMouseLeave={() => { pausedRef.current = false; }}>
       <div className="hidden sm:flex flex-col w-44 shrink-0 border-r border-hairline p-4 gap-1">
         <div className="flex items-center gap-2 mb-3 px-1"><Image src="/logo.png" alt="" width={18} height={18} className="object-contain rounded" /><span className="text-[13px] font-semibold">Engram</span></div>
-        {[{ t: "Graph", a: false }, { t: "Recap", a: false }, { t: "Ingest", a: false }, { t: "Resolve", a: true }, { t: "Ask", a: false }].map((n) => (<div key={n.t} className={`px-3 py-1.5 rounded-lg text-[12px] font-medium ${n.a ? "bg-surface-strong text-ink" : "text-muted"}`}>{n.t}</div>))}
+        {[{ t: "Graph", a: false }, { t: "Recap", a: false }, { t: "Ingest", a: false }, { t: "Resolve", a: true }, { t: "Ask", a: false }].map((n) => (<div key={n.t} className={`px-3 py-1.5 rounded-lg text-[12px] font-medium transition-colors ${n.a ? "bg-surface-strong text-ink" : "text-muted"}`}>{n.t}</div>))}
       </div>
       <div className="flex-1 p-5 sm:p-6">
         <div className="flex items-center justify-between mb-4">
-          <div><h3 className="text-[15px] font-semibold">Resolve contradictions</h3><p className="text-[12px] text-muted mt-0.5">Factual conflicts (2 active)</p></div>
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold" style={chip(T.amber)}><span className="w-1.5 h-1.5 rounded-full bg-current animate-pulse" /> 2 pending</span>
+          <div><h3 className="text-[15px] font-semibold">Resolve contradictions</h3><p className="text-[12px] text-muted mt-0.5">Superseded decisions in your build</p></div>
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold transition-colors" style={chip(choice ? T.mint : T.amber)}>
+            <span className="w-1.5 h-1.5 rounded-full bg-current animate-pulse" />{choice ? "Resolved" : `${DEMO_CONFLICTS.length} pending`}
+          </span>
         </div>
-        <div className="rounded-xl border border-hairline p-4">
-          <div className="text-[12px] font-semibold text-muted mb-3">Conflict: database choice</div>
+        <div key={idx} className="route-enter rounded-xl border border-hairline p-4">
+          <div className="text-[12px] font-semibold text-muted mb-3">Conflict: {c.topic}</div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div className="rounded-lg border border-hairline bg-surface-strong/40 p-3"><div className="text-[11px] caption-upper text-muted mb-1.5">Old belief</div><div className="text-[13px] font-medium text-muted line-through">postgres</div><div className="text-[11px] text-muted mt-1">project_spec.md · 2023-10-15</div></div>
-            <div className="rounded-lg p-3" style={{ border: `1.5px solid color-mix(in srgb, ${T.mint} 55%, transparent)`, background: `color-mix(in srgb, ${T.mint} 8%, transparent)` }}><div className="text-[11px] caption-upper mb-1.5" style={{ color: T.mint }}>New evidence</div><div className="text-[13px] font-medium text-ink">supabase</div><div className="text-[11px] text-muted mt-1">adr_v4.pdf · 2023-11-20</div></div>
+            <div className="rounded-lg border p-3 transition-all duration-300" style={{
+              borderColor: oldChosen ? "color-mix(in srgb, var(--color-ink) 55%, transparent)" : "var(--color-hairline)",
+              background: oldChosen ? "color-mix(in srgb, var(--color-ink) 6%, transparent)" : "color-mix(in srgb, var(--color-surface-strong) 45%, transparent)",
+              opacity: choice === "new" ? 0.5 : 1,
+            }}>
+              <div className="flex items-center justify-between mb-1.5"><span className="text-[11px] caption-upper text-muted">Old belief</span>{oldChosen && <ResolveCheck />}</div>
+              <div className={`text-[13px] font-medium ${choice === "new" ? "text-muted line-through" : "text-ink"}`}>{c.oldV}</div>
+              <div className="text-[11px] text-muted mt-1">{c.oldSrc} · {c.oldDate}</div>
+            </div>
+            <div className="rounded-lg border p-3 transition-all duration-300" style={{
+              borderColor: newChosen || choice === null ? `color-mix(in srgb, ${T.mint} 55%, transparent)` : "var(--color-hairline)",
+              background: newChosen || choice === null ? `color-mix(in srgb, ${T.mint} 8%, transparent)` : "transparent",
+              opacity: choice === "old" ? 0.5 : 1,
+            }}>
+              <div className="flex items-center justify-between mb-1.5"><span className="text-[11px] caption-upper" style={{ color: T.mint }}>New evidence</span>{newChosen && <ResolveCheck tint={T.mint} />}</div>
+              <div className={`text-[13px] font-medium ${choice === "old" ? "text-muted line-through" : "text-ink"}`}>{c.newV}</div>
+              <div className="text-[11px] text-muted mt-1">{c.newSrc} · {c.newDate}</div>
+            </div>
           </div>
-          <div className="flex items-center gap-2 mt-4"><span className="px-3 py-1.5 rounded-lg border border-hairline text-[12px] font-medium text-body">Keep old</span><span className="px-3 py-1.5 rounded-lg text-[12px] font-semibold bg-ink text-canvas">Keep new</span><span className="px-3 py-1.5 rounded-lg border border-hairline text-[12px] font-medium text-body">Keep both</span></div>
+          <div className="flex items-center gap-2 mt-4">
+            <button onClick={() => resolve("old")} className="tap px-3 py-1.5 rounded-lg border text-[12px] font-medium transition-all cursor-pointer" style={{ borderColor: choice === "old" ? "var(--color-ink)" : "var(--color-hairline)", background: choice === "old" ? "var(--color-ink)" : "transparent", color: choice === "old" ? "var(--color-canvas)" : "var(--color-body)" }}>Keep old</button>
+            <button onClick={() => resolve("new")} className="tap px-3 py-1.5 rounded-lg text-[12px] font-semibold bg-ink text-canvas transition-all cursor-pointer" style={{ opacity: choice && choice !== "new" ? 0.5 : 1 }}>Keep new</button>
+            <button onClick={() => resolve("both")} className="tap px-3 py-1.5 rounded-lg border text-[12px] font-medium transition-all cursor-pointer" style={{ borderColor: choice === "both" ? "var(--color-ink)" : "var(--color-hairline)", background: choice === "both" ? "var(--color-ink)" : "transparent", color: choice === "both" ? "var(--color-canvas)" : "var(--color-body)" }}>Keep both</button>
+          </div>
+          <div className="flex items-center gap-1.5 mt-4">
+            {DEMO_CONFLICTS.map((_, i) => (
+              <span key={i} className="h-1 rounded-full transition-all duration-300" style={{ width: i === idx ? 18 : 6, background: i === idx ? "var(--color-ink)" : "var(--color-hairline-strong)" }} />
+            ))}
+          </div>
         </div>
       </div>
     </div>
