@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 
+// Give the proxy room for slow backend responses (Cognee calls, cold starts on
+// the hosted backend) so a valid-but-slow response is not cut short into a 502.
+export const maxDuration = 60;
+
 async function handleProxy(request: NextRequest, pathArray: string[]) {
   const session = await auth();
 
