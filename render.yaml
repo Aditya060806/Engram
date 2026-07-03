@@ -67,11 +67,11 @@ services:
       - key: COGNEE_SKIP_CONNECTION_TEST
         value: "true"
 
-      # --- Optional: hosted Cognee Cloud tenant (recommended for persistent memory,
-      #     since Render's disk is ephemeral). Uncomment and fill to enable. ---
-      # - key: COGNEE_API_KEY
-      #   sync: false
-      # - key: COGNEE_SERVICE_URL
-      #   sync: false
-      # - key: COGNEE_TENANT_ID
-      #   sync: false
+      # --- Hosted Cognee Cloud tenant: routes remember/recall/improve/forget to the
+      #     tenant so memory persists and recall answers from the graph. Set all three. ---
+      - key: COGNEE_API_KEY
+        sync: false
+      - key: COGNEE_SERVICE_URL
+        sync: false
+      - key: COGNEE_TENANT_ID
+        sync: false
