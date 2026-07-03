@@ -48,6 +48,8 @@
 - [6. Core Architecture and Memory Lifecycle](#6-core-architecture-and-memory-lifecycle)
 - [7. Request Sequences](#7-request-sequences)
 - [8. Cognee API Mapping](#8-cognee-api-mapping)
+  - [8.1 Verifying the lifecycle end-to-end](#81-verifying-the-lifecycle-end-to-end)
+  - [8.2 Schema-guided (typed) extraction](#82-schema-guided-typed-extraction)
 - [9. Data Model](#9-data-model)
 - [10. Key Features](#10-key-features)
 - [11. The Math: Confidence, Decay, and Reconciliation](#11-the-math-confidence-decay-and-reconciliation)
@@ -123,14 +125,14 @@ xychart-beta
 
 ### Capability coverage score
 
-Counting the capabilities from the comparison matrix in [§2](#2-why-engram-is-different), Engram satisfies **9 of 9** while common approaches cover far fewer.
+Counting the capabilities from the comparison matrix in [§2](#2-why-engram-is-different), Engram satisfies **10 of 10** while common approaches cover far fewer.
 
 ```mermaid
 xychart-beta
-    title "Capabilities satisfied (out of 9)"
+    title "Capabilities satisfied (out of 10)"
     x-axis ["Summary buffer", "Append-only", "Vector RAG", "Engram"]
-    y-axis "Capabilities" 0 --> 9
-    bar [1, 3, 4, 9]
+    y-axis "Capabilities" 0 --> 10
+    bar [1, 3, 4, 10]
 ```
 
 ### Measured recall routing (live tenant)
@@ -243,6 +245,7 @@ Most "memory for AI" projects stop at *store and retrieve*. Engram treats memory
 | Automatic decay + forget of stale facts | ❌ | ❌ | ✅ |
 | Temporal "what changed since X?" diffs | ❌ | ❌ | ✅ |
 | Provenance + schema inventory views | Rare | ❌ | ✅ |
+| Typed ontology extraction (not generic chunks) | ❌ | ❌ | ✅ `graph_model` + custom prompt |
 | Uses the full Cognee lifecycle | n/a | n/a | ✅ `remember`/`recall`/`improve`/`forget` |
 
 ---
@@ -254,7 +257,7 @@ Most "memory for AI" projects stop at *store and retrieve*. Engram treats memory
 | **Potential Impact** | [The Problem & Potential Impact](#1-the-problem--potential-impact) — acting on stale/contradicted knowledge is a real, recurring cost this directly addresses |
 | **Creativity & Innovation** | [The Reconciliation Engine](#101-the-reconciliation-engine) + "What Changed?" diff query — most memory tools stop at recall; this one decides what still deserves trust |
 | **Technical Excellence** | [Core Architecture & Memory Lifecycle](#6-core-architecture-and-memory-lifecycle) + [Cognee API Mapping](#8-cognee-api-mapping) below |
-| **Best Use of Cognee** | Full lifecycle usage — `remember`/`recall`/`improve`/`forget` are all load-bearing, wired to **both the local SDK and a hosted Cognee Cloud tenant** (REST), and verified end-to-end by [`test_cognee_cloud.py`](#81-verifying-the-lifecycle-end-to-end) |
+| **Best Use of Cognee** | Full lifecycle usage — `remember`/`recall`/`improve`/`forget` are all load-bearing, wired to **both the local SDK and a hosted Cognee Cloud tenant** (REST), with **schema-guided typed extraction** ([8.2](#82-schema-guided-typed-extraction)), and verified end-to-end by [`test_cognee_cloud.py`](#81-verifying-the-lifecycle-end-to-end) |
 | **User Experience** | The [Product walkthrough](#product-walkthrough) screenshots + a live "graph is building" indicator, animated landing, and the interactive `/ask` and `/resolve` flows |
 | **Presentation Quality** | The WeMakeDevs project submission page + this comprehensive README |
 
@@ -457,8 +460,8 @@ sequenceDiagram
     U->>FE: Add source (repo/PDF/article/note)
     FE->>PX: POST /ingest
     PX->>API: POST /ingest (X-Engram-Key, X-User-Id)
-    API->>CG: remember() -> add_text + cognify
-    CG-->>API: graph updated
+    API->>CG: remember() with typed graph_model (add_text + cognify fallback)
+    CG-->>API: typed graph updated (Fact/Decision/Topic)
     API->>CG: recall() nearby facts for conflict check
     API->>API: contradiction judge (supersedes / contradicts)
     alt conflict found
@@ -502,7 +505,7 @@ Engram uses Cognee two ways, both load-bearing: the **local Python SDK** (embedd
 
 | Cognee Operation | Local SDK call | Hosted-tenant REST endpoint | Engram feature |
 |---|---|---|---|
-| `remember()` | `cognee.remember(...)` | `POST /api/v1/add_text` → `POST /api/v1/cognify` | Ingests GitHub repos, PDFs, ChatGPT/Claude exports, articles, YouTube transcripts, free-text notes + chat-turn memory |
+| `remember()` | `cognee.remember(...)` | `POST /api/v1/remember` (typed) → `add_text` + `cognify` (fallback) | Ingests GitHub repos, PDFs, ChatGPT/Claude exports, articles, YouTube transcripts, free-text notes + chat-turn memory, with a typed ontology (see [8.2](#82-schema-guided-typed-extraction)) |
 | `recall()` | `cognee.recall(...)` | `POST /api/v1/recall` | Graph-grounded, time-aware chat queries ("what did I believe before vs now") + the `/recap` narrative |
 | `improve()` / memify | `cognee.memify(...)` / `cognify()` | `POST /api/v1/cognify` (re-enrichment) | Post-ingestion enrichment + the "Run enrichment" action in Settings |
 | `forget()` | `cognee.forget(...)` | `POST /api/v1/forget` | Source-level pruning and automatic confidence-decay sweeps |
@@ -511,12 +514,6 @@ Engram uses Cognee two ways, both load-bearing: the **local Python SDK** (embedd
 Core wiring lives in [`services/__init__.py`](https://github.com/Aditya060806/Engram/blob/main/backend/services/__init__.py) and the tenant REST client in [`cognee_cloud.py`](https://github.com/Aditya060806/Engram/blob/main/backend/cognee_cloud.py).
 
 > **Cognee-first by design.** Recall prefers the Cognee `GRAPH_COMPLETION` path and only falls back to an LLM provider when the graph has no grounded answer (for example, an empty graph on a fresh deploy). Answers surface their origin as `provider=cognee model=graph-completion` when served from the graph.
-
-### 8.2 Schema-guided (typed) extraction
-
-Ingestion does not settle for generic chunks. Engram hands Cognee Cloud `remember()` a **typed ontology** (`graph_model`, a JSON Schema) plus a **custom extraction prompt** ([graph_model.py](https://github.com/Aditya060806/Engram/blob/main/backend/graph_model.py)), so the graph is built from Engram's own domain types, `Source`, `Topic`, `Entity`, `Fact`, and `Decision`, with typed edges including `supersedes` and `contradicts`. Those two edges are the backbone of the reconciliation and decay story: they let the graph itself express "this replaced that" rather than leaving it implicit.
-
-This is verified live: ingesting a supersession scenario ("chose Postgres, then switched to Supabase, which supersedes the earlier decision") into a throwaway tenant dataset produced typed `Decision`, `Topic`, and `Entity` nodes, not opaque chunks. If a tenant ever rejects the graph model, ingestion transparently falls back to the proven `add_text` plus `cognify` path, so extraction is strictly an upgrade with no regression risk.
 
 ### 8.1 Verifying the lifecycle end-to-end
 
@@ -535,11 +532,17 @@ PASS  forget() — dataset pruned from tenant
 
 That `recall()` line is the hackathon prompt itself — ingest "Doug is the groom… the wedding is Sunday," then answer *"Where is Doug?"* across a fresh query, straight from the Cognee-built graph.
 
+### 8.2 Schema-guided (typed) extraction
+
+Ingestion does not settle for generic chunks. Engram hands Cognee Cloud `remember()` a **typed ontology** (`graph_model`, a JSON Schema) plus a **custom extraction prompt** ([graph_model.py](https://github.com/Aditya060806/Engram/blob/main/backend/graph_model.py)), so the graph is built from Engram's own domain types, `Source`, `Topic`, `Entity`, `Fact`, and `Decision`, with typed edges including `supersedes` and `contradicts`. Those two edges are the backbone of the reconciliation and decay story: they let the graph itself express "this replaced that" rather than leaving it implicit.
+
+This is verified live: ingesting a supersession scenario ("chose Postgres, then switched to Supabase, which supersedes the earlier decision") into a throwaway tenant dataset produced typed `Decision`, `Topic`, and `Entity` nodes, not opaque chunks. If a tenant ever rejects the graph model, ingestion transparently falls back to the proven `add_text` plus `cognify` path, so extraction is strictly an upgrade with no regression risk.
+
 ---
 
 ## 9. Data Model
 
-Engram keeps a lightweight relational metadata layer alongside the Cognee graph. The metadata store tracks sources, contradictions, the reconciliation audit trail, confidence history, decay settings, and encrypted BYOK config. The rich semantic graph itself lives in Cognee.
+Engram keeps a lightweight relational metadata layer alongside the Cognee graph. The metadata store tracks sources, contradictions, the reconciliation audit trail, confidence history, decay settings, and encrypted BYOK config. The rich semantic graph itself lives in Cognee, and it is **typed**: ingestion steers `remember()` with a `graph_model` so the graph is built from `Source`, `Topic`, `Entity`, `Fact`, and `Decision` nodes with `supersedes` and `contradicts` edges rather than generic chunks (see [8.2](#82-schema-guided-typed-extraction)).
 
 ```mermaid
 erDiagram
@@ -819,12 +822,12 @@ quadrantChart
 
 ### Scorecard (1 point per capability from §2)
 
-| Approach | Ingest | Recall | Detect conflicts | Reconcile | Confidence | Decay/forget | Temporal diffs | Provenance | Full Cognee | **Total** |
-|---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
-| Summary buffer | ½ | ½ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | **1** |
-| Append-only memory | 1 | 1 | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | **3** |
-| Vector-store RAG | 1 | 1 | ✗ | ✗ | ✗ | ✗ | ✗ | ½ | ✗ | **4** |
-| **Engram** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | **9** |
+| Approach | Ingest | Recall | Detect conflicts | Reconcile | Confidence | Decay/forget | Temporal diffs | Provenance | Typed graph | Full Cognee | **Total** |
+|---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
+| Summary buffer | ½ | ½ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | **1** |
+| Append-only memory | 1 | 1 | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | **3** |
+| Vector-store RAG | 1 | 1 | ✗ | ✗ | ✗ | ✗ | ✗ | ½ | ✗ | ✗ | **4** |
+| **Engram** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | **10** |
 
 The gap is not incremental. Engram is the only row that treats memory as a lifecycle with an opinion about truth over time, which is exactly the "Where is My Context?" problem this hackathon poses.
 
