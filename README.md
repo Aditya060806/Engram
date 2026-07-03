@@ -42,6 +42,7 @@
 - [1. The Problem & Potential Impact](#1-the-problem--potential-impact)
 - [2. Why Engram Is Different](#2-why-engram-is-different)
 - [3. Hackathon Submission & Judging Criteria](#3-hackathon-submission--judging-criteria)
+  - [3.1 Two Tracks, One Codebase](#31-two-tracks-one-codebase)
 - [4. Feature Tour](#4-feature-tour)
 - [5. System Architecture](#5-system-architecture)
 - [6. Core Architecture and Memory Lifecycle](#6-core-architecture-and-memory-lifecycle)
@@ -74,7 +75,7 @@
 |---|---|
 | **What it is** | A dashboard that turns raw context (repos, PDFs, articles, chat exports, YouTube, free-text notes) into a living knowledge graph that reconciles contradictions and forgets stale facts on its own. |
 | **The one-liner** | Most memory tools only *append and recall*. Engram also *decides what still deserves trust*. |
-| **Cognee usage** | The full lifecycle — `remember` / `recall` / `improve` / `forget` — is load-bearing, wired to **both the local SDK and a hosted Cognee Cloud tenant**, and verified end to end. |
+| **Cognee usage** | The full lifecycle — `remember` / `recall` / `improve` / `forget` — is load-bearing, wired to **both the local SDK and a hosted Cognee Cloud tenant**, and verified end to end. Qualifies for **both** tracks (see [3.1 Two Tracks, One Codebase](#31-two-tracks-one-codebase)). |
 | **Stack** | Next.js 16 + React 19 + Tailwind v4 frontend, FastAPI + Cognee backend, SQLite locally / PostgreSQL + PGVector in production. |
 | **Built for** | The Hangover Part AI: Where is My Context? — WeMakeDevs x Cognee Hackathon (Jun 29 - Jul 5, 2026). |
 
@@ -251,6 +252,46 @@ Most "memory for AI" projects stop at *store and retrieve*. Engram treats memory
 | **Best Use of Cognee** | Full lifecycle usage — `remember`/`recall`/`improve`/`forget` are all load-bearing, wired to **both the local SDK and a hosted Cognee Cloud tenant** (REST), and verified end-to-end by [`test_cognee_cloud.py`](#81-verifying-the-lifecycle-end-to-end) |
 | **User Experience** | The [Product walkthrough](#product-walkthrough) screenshots + a live "graph is building" indicator, animated landing, and the interactive `/ask` and `/resolve` flows |
 | **Presentation Quality** | The WeMakeDevs project submission page + this comprehensive README |
+
+### 3.1 Two Tracks, One Codebase
+
+Engram is built for **both** hackathon tracks, and the same lifecycle logic powers each. It is not two projects bolted together: there is one memory model with two interchangeable Cognee backends, chosen at runtime.
+
+```mermaid
+flowchart TB
+    App["Engram memory logic\n(remember · recall · improve · forget)"]
+    App --> Router{"COGNEE_API_KEY +\nCOGNEE_SERVICE_URL set?"}
+    Router -->|"yes"| Cloud["Track 2: Cognee Cloud\nhosted tenant via REST\n(cognee_cloud.py)"]
+    Router -->|"no"| OSS["Track 1: Cognee Open Source\nembedded self-hosted SDK\n(cognee.* calls)"]
+    Cloud --> Same["Identical UX:\nAsk · Graph · Resolve · Recap · Provenance"]
+    OSS --> Same
+    classDef c stroke:#3b82f6,stroke-width:2px;
+    class Cloud,OSS c;
+```
+
+| | **Track 1: Best Use of Cognee Open Source** | **Track 2: Best Use of Cognee Cloud** |
+|---|---|---|
+| **How it runs** | Embedded `cognee` SDK, self-hosted | Hosted Cognee Cloud tenant over REST |
+| **Where** | [`services/__init__.py`](https://github.com/Aditya060806/Engram/blob/main/backend/services/__init__.py) | [`cognee_cloud.py`](https://github.com/Aditya060806/Engram/blob/main/backend/cognee_cloud.py) |
+| **Lifecycle** | `cognee.remember / cognify / memify / recall / forget` | `add_text → cognify`, `recall`, `cognify` (improve), `forget` |
+| **Beyond the basics** | `visualize_memory_provenance`, `get_schema_inventory`, `session.get_session / distill_session / add_feedback`, `run_migrations`, self-hosted relational + vector + graph store config | datasets, dataset graph, schema inventory, provenance HTML, per-tenant isolation |
+| **Proof it works** | Runs the whole app with cloud vars unset; `/` reports `recall_source: local-sdk` | Live deploy: `recall_source: cognee-cloud`, [10/10 measured recalls](#measured-recall-routing-live-tenant), [6/6 lifecycle test](#81-verifying-the-lifecycle-end-to-end) |
+
+**Demonstrate each track in one command each:**
+
+```bash
+# Track 2 — Cognee Cloud (the live deploy runs this way)
+#   set COGNEE_API_KEY + COGNEE_SERVICE_URL (+ COGNEE_TENANT_ID), then:
+python -m uvicorn main:app --port 8000
+#   GET / -> "recall_source": "cognee-cloud"
+
+# Track 1 — Cognee Open Source (self-hosted SDK, no cloud vars)
+#   leave COGNEE_API_KEY / COGNEE_SERVICE_URL unset, then:
+python -m uvicorn main:app --port 8000
+#   GET / -> "recall_source": "local-sdk"
+```
+
+Same endpoints, same UI, same reconciliation and decay behavior. Only the Cognee backend changes.
 
 ---
 
