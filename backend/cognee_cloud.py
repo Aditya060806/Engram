@@ -12,6 +12,7 @@ separate tenant header is optional; we send X-Tenant-Id too when provided).
 """
 from __future__ import annotations
 
+import json
 import os
 from typing import Any, Optional
 
@@ -105,6 +106,45 @@ class CogneeCloudClient:
         """Convenience: add text then kick off graph building."""
         await self.add_text([text], dataset_name)
         return await self.cognify(dataset_name, run_in_background=run_in_background)
+
+    async def remember(
+        self,
+        text: str,
+        dataset_name: str,
+        filename: str = "engram_note.md",
+        graph_model: dict | None = None,
+        custom_prompt: str | None = None,
+        run_in_background: bool = True,
+    ) -> Any:
+        """Schema-guided ingest via Cognee Cloud's remember() (V2 memory API).
+
+        Passing a `graph_model` (JSON Schema ontology) plus a `custom_prompt`
+        steers extraction into typed domain nodes and edges (Fact, Decision,
+        supersedes, contradicts, ...) instead of generic document chunks. Sent as
+        multipart form-data, matching the tenant's /api/v1/remember contract.
+        """
+        client = self._pool()
+        timeout = httpx.Timeout(self._timeout, connect=10.0)
+        files = {"data": (filename, text.encode("utf-8"), "text/markdown")}
+        data: dict[str, str] = {
+            "datasetName": dataset_name,
+            "run_in_background": "true" if run_in_background else "false",
+        }
+        if graph_model:
+            data["graph_model"] = json.dumps(graph_model)
+        if custom_prompt:
+            data["custom_prompt"] = custom_prompt
+        resp = await client.request(
+            "POST",
+            f"{self.base_url}/api/v1/remember",
+            headers=self._headers,
+            files=files,
+            data=data,
+            timeout=timeout,
+        )
+        resp.raise_for_status()
+        ctype = resp.headers.get("content-type", "")
+        return resp.json() if "application/json" in ctype else resp.text
 
     async def remember_qa(self, question: str, answer: str, context: str, session_id: str, dataset_name: str) -> Any:
         return await self._request(

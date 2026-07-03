@@ -604,9 +604,27 @@ async def run_ingest_background(job_id: str, source: Source, req: IngestRequest,
                             await client.ensure_dataset(get_cognee_dataset())
                         except Exception as ds_err:
                             print(f"[Cognee Cloud] ensure_dataset warning ({ds_err})", flush=True)
-                        await client.remember_text(full, get_cognee_dataset(), run_in_background=True)
-                        log_cognee_activity("remember()", f"[Cloud] Ingested '{req.label}' → cognify started on tenant")
-                        return
+                        # Prefer schema-guided extraction: hand Cognee a typed ontology so
+                        # it builds Fact/Decision/Topic nodes with supersedes/contradicts
+                        # edges instead of generic chunks. Fall back to the proven
+                        # add_text + cognify path if the tenant rejects the graph model.
+                        try:
+                            from graph_model import ENGRAM_GRAPH_MODEL, ENGRAM_CUSTOM_PROMPT
+                            await client.remember(
+                                full,
+                                get_cognee_dataset(),
+                                filename=f"{req.label[:60] or 'note'}.md",
+                                graph_model=ENGRAM_GRAPH_MODEL,
+                                custom_prompt=ENGRAM_CUSTOM_PROMPT,
+                                run_in_background=True,
+                            )
+                            log_cognee_activity("remember()", f"[Cloud] Ingested '{req.label}' with typed ontology (Fact/Decision/Topic)")
+                            return
+                        except Exception as typed_err:
+                            print(f"[Cognee Cloud] typed remember() failed ({typed_err}); using add_text + cognify.", flush=True)
+                            await client.remember_text(full, get_cognee_dataset(), run_in_background=True)
+                            log_cognee_activity("remember()", f"[Cloud] Ingested '{req.label}' → cognify started on tenant")
+                            return
                     except Exception as e:
                         print(f"[Cognee Cloud] ingest failed ({e}); falling back to local memory.", flush=True)
 
