@@ -298,12 +298,12 @@ export default function LandingPage() {
         <div aria-hidden className="ambient-orb pointer-events-none absolute top-10 right-[4%] w-[320px] sm:w-[420px] h-[320px] sm:h-[420px] rounded-full blur-[100px] opacity-[0.04] bg-ink" style={{ animationDelay: "3s" }} />
         <div className="relative max-w-[1180px] mx-auto">
           <div className="max-w-3xl mx-auto text-center">
-            <Reveal className="flex justify-center">
+            <div className="load-rise flex justify-center" style={{ animationDelay: "0s" }}>
               <span className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full border border-hairline bg-surface-card/60 backdrop-blur-sm caption-upper text-muted">
                 <span className="relative flex h-1.5 w-1.5"><span className="absolute inline-flex h-full w-full rounded-full bg-ink opacity-60 animate-ping" /><span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-ink" /></span>
                 Built on the Cognee memory lifecycle
               </span>
-            </Reveal>
+            </div>
             <h1 className="display-mega mt-6 sm:mt-7 leading-[1.03]">
               <span className="block">{HEAD_LINE_1.map((w, i) => (<span key={w} className="hl-word" style={{ "--i": i } as React.CSSProperties}>{w}&nbsp;</span>))}</span>
               <span className="block">
@@ -312,8 +312,8 @@ export default function LandingPage() {
                 <span className="hl-word" style={{ "--i": 7 } as React.CSSProperties}>.</span>
               </span>
             </h1>
-            <Reveal delay={700}><p className="mt-6 text-base sm:text-xl text-body leading-relaxed max-w-2xl mx-auto">Your AI forgets last night and confidently repeats stale facts. Engram is the self-reconciling memory layer that catches contradictions the moment they appear, and forgets only what has stopped mattering.</p></Reveal>
-            <Reveal delay={820}>
+            <p className="load-rise mt-6 text-base sm:text-xl text-body leading-relaxed max-w-2xl mx-auto" style={{ animationDelay: "0.7s" }}>Your AI forgets last night and confidently repeats stale facts. Engram is the self-reconciling memory layer that catches contradictions the moment they appear, and forgets only what has stopped mattering.</p>
+            <div className="load-rise" style={{ animationDelay: "0.85s" }}>
               <div className="mt-8 sm:mt-9 flex flex-col sm:flex-row items-center justify-center gap-3">
                 <button onClick={enter} className="sheen group inline-flex items-center gap-2 px-6 py-3.5 rounded-full bg-ink text-canvas text-[15px] font-semibold hover:opacity-90 transition-all hover:scale-[1.02] active:scale-95 cursor-pointer w-full sm:w-auto justify-center">
                   {session ? "Open the app" : "Get started free"}
@@ -324,13 +324,13 @@ export default function LandingPage() {
                   View on GitHub
                 </a>
               </div>
-            </Reveal>
+            </div>
           </div>
-          <Reveal delay={400} className="mt-12 sm:mt-16 max-w-4xl mx-auto">
+          <div className="load-rise mt-12 sm:mt-16 max-w-4xl mx-auto" style={{ animationDelay: "1s" }}>
             <div className="float-y">
               <AppFrame url={`${BASE_URL.replace(/^https?:\/\//, "")}/resolve`}><ReconciliationDemo /></AppFrame>
             </div>
-          </Reveal>
+          </div>
         </div>
       </section>
 
