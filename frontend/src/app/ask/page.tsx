@@ -246,6 +246,47 @@ function parseMarkdown(text: string) {
   });
 }
 
+const THINKING_STAGES = [
+  "Searching your Cognee graph…",
+  "Traversing relationships…",
+  "Weighing confidence and recency…",
+  "Composing a grounded answer…",
+];
+
+function ThinkingIndicator() {
+  const [i, setI] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => setI((v) => (v + 1) % THINKING_STAGES.length), 2200);
+    return () => clearInterval(id);
+  }, []);
+  return <span className="text-[13px] font-medium text-muted transition-opacity duration-300">{THINKING_STAGES[i]}</span>;
+}
+
+// Reveals the answer progressively (a "typewriter" feel) the first time it
+// appears, then renders the full markdown. Non-fresh messages (history, switches)
+// render instantly, so nothing re-animates on navigation.
+function AnswerReveal({ text, animate }: { text: string; animate: boolean }) {
+  const [shown, setShown] = useState(animate ? 0 : text.length);
+  useEffect(() => {
+    // When not animating, initial state already shows the full text, so there is
+    // nothing to do (and no synchronous setState in the effect body).
+    if (!animate) return;
+    let i = 0;
+    const step = Math.max(2, Math.round(text.length / 120));
+    const id = setInterval(() => {
+      i += step;
+      if (i >= text.length) {
+        setShown(text.length);
+        clearInterval(id);
+      } else {
+        setShown(i);
+      }
+    }, 16);
+    return () => clearInterval(id);
+  }, [animate, text]);
+  return <>{parseMarkdown(text.slice(0, shown))}</>;
+}
+
 export default function AskPage() {
   const {
     messages,
@@ -291,6 +332,18 @@ export default function AskPage() {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const isFirstRender = useRef(true);
   const [promptChips, setPromptChips] = useState<string[]>(fallbackPromptChips);
+  const [freshId, setFreshId] = useState<string | null>(null);
+  const prevLenRef = useRef(messages.length);
+
+  // Mark the newest assistant answer as "fresh" so it typewrites in once.
+  useEffect(() => {
+    if (messages.length > prevLenRef.current) {
+      const last = messages[messages.length - 1];
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      if (last && !last.isError) setFreshId(last.id);
+    }
+    prevLenRef.current = messages.length;
+  }, [messages]);
 
   useEffect(() => {
     if (scrollContainerRef.current) {
@@ -499,7 +552,7 @@ export default function AskPage() {
                       )}
                     </div>
                   ) : (
-                    parseMarkdown(msg.answer)
+                    <AnswerReveal text={msg.answer} animate={msg.id === freshId} />
                   )}
                 </div>
                 {msg.diffCard && <DiffCardView diff={msg.diffCard} />}
@@ -563,7 +616,7 @@ export default function AskPage() {
                     <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" style={{ animationDelay: "0.2s" }} />
                     <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" style={{ animationDelay: "0.4s" }} />
                   </div>
-                  <span className="text-[13px] font-medium text-muted">Traversing your memory graph…</span>
+                  <ThinkingIndicator />
                 </div>
               </div>
             </div>
