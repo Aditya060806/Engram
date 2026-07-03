@@ -201,11 +201,18 @@ def db_init():
         ingested_at TEXT NOT NULL,
         last_synced_at TEXT,
         status TEXT NOT NULL,
-        user_id TEXT NOT NULL DEFAULT ''
+        user_id TEXT NOT NULL DEFAULT '',
+        cognee_data_id TEXT DEFAULT ''
     )
     """)
     try:
         cursor.execute("ALTER TABLE sources ADD COLUMN content TEXT DEFAULT ''")
+    except Exception:
+        pass
+    try:
+        # Stable link from a source row to its Cognee data-item UUID, so forget()
+        # can prune by exact id instead of fuzzy name matching.
+        cursor.execute("ALTER TABLE sources ADD COLUMN cognee_data_id TEXT DEFAULT ''")
     except Exception:
         pass
     
@@ -295,6 +302,20 @@ def db_init():
         updated_at TEXT NOT NULL
     )
     """)
+
+    # 7. Server-side chat history (per user), so conversations survive across
+    # devices and browser clears, not just localStorage.
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS chat_conversations (
+        conv_id TEXT NOT NULL,
+        user_id TEXT NOT NULL DEFAULT '',
+        title TEXT NOT NULL,
+        messages TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        PRIMARY KEY (conv_id, user_id)
+    )
+    """)
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_chat_conversations_user ON chat_conversations(user_id)")
     
     # Insert default decay settings if not present
     cursor.execute("SELECT COUNT(*) FROM decay_settings")
@@ -489,6 +510,37 @@ def db_get_source_content(source_label: str, user_id: str = "") -> Optional[str]
         conn.close()
     return row["content"] if row else None
 
+def db_update_source_cognee_id(source_id: str, cognee_data_id: str, user_id: str = ""):
+    """Store the Cognee data-item UUID for a source so forget() can prune by exact id."""
+    user_id = user_id or get_current_user()
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor()
+        if user_id:
+            cursor.execute("UPDATE sources SET cognee_data_id = ? WHERE id = ? AND user_id = ?", (cognee_data_id, source_id, user_id))
+        else:
+            cursor.execute("UPDATE sources SET cognee_data_id = ? WHERE id = ?", (cognee_data_id, source_id))
+        conn.commit()
+    finally:
+        conn.close()
+
+def db_get_source_cognee_id(source_id: str, user_id: str = "") -> Optional[str]:
+    user_id = user_id or get_current_user()
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT cognee_data_id FROM sources WHERE id = ?", (source_id,))
+        row = cursor.fetchone()
+    finally:
+        conn.close()
+    if not row:
+        return None
+    try:
+        val = row["cognee_data_id"]
+    except (KeyError, IndexError):
+        return None
+    return val or None
+
 def db_delete_source(source_id: str, user_id: str = ""):
     user_id = user_id or get_current_user()
     conn = get_db_connection()
@@ -525,6 +577,7 @@ def db_delete_source(source_id: str, user_id: str = ""):
 
 # Conflicts CRUD
 def db_save_conflict(c: ConflictEvent, user_id: str = ""):
+    user_id = user_id or get_current_user()
     conn = get_db_connection()
     try:
         cursor = conn.cursor()
@@ -585,6 +638,7 @@ def db_get_conflicts(include_resolved: bool = True, user_id: str = "") -> List[C
 
 # Reconciliation Log CRUD
 def db_save_reconciliation_log_entry(e: ReconciliationLogEntry, user_id: str = ""):
+    user_id = user_id or get_current_user()
     conn = get_db_connection()
     try:
         cursor = conn.cursor()
@@ -629,6 +683,7 @@ def db_get_reconciliation_log(topic: Optional[str] = None, user_id: str = "") ->
 
 # Confidence History CRUD
 def db_save_confidence_history_entry(e: ConfidenceHistoryEntry, user_id: str = ""):
+    user_id = user_id or get_current_user()
     conn = get_db_connection()
     try:
         cursor = conn.cursor()
@@ -843,3 +898,68 @@ def db_seed_demo(user_id: str = ""):
     ]
     for h in history:
         db_save_confidence_history_entry(h, user_id=user_id)
+
+
+# ── Server-side chat history CRUD ──
+def db_save_conversation(conv_id: str, title: str, messages_json: str, user_id: str = ""):
+    from datetime import datetime, timezone
+    user_id = user_id or get_current_user()
+    now = datetime.now(timezone.utc).isoformat()
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute("""
+        INSERT INTO chat_conversations (conv_id, user_id, title, messages, updated_at)
+        VALUES (?, ?, ?, ?, ?)
+        ON CONFLICT(conv_id, user_id) DO UPDATE SET
+            title=excluded.title,
+            messages=excluded.messages,
+            updated_at=excluded.updated_at
+        """, (conv_id, user_id, title, messages_json, now))
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def db_list_conversations(user_id: str = "") -> List[dict]:
+    user_id = user_id or get_current_user()
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT conv_id, title, updated_at FROM chat_conversations WHERE user_id = ? ORDER BY updated_at DESC",
+            (user_id,),
+        )
+        rows = cursor.fetchall()
+    finally:
+        conn.close()
+    return [{"id": r["conv_id"], "title": r["title"], "updatedAt": r["updated_at"]} for r in rows]
+
+
+def db_get_conversation(conv_id: str, user_id: str = "") -> Optional[str]:
+    user_id = user_id or get_current_user()
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT messages FROM chat_conversations WHERE conv_id = ? AND user_id = ?",
+            (conv_id, user_id),
+        )
+        row = cursor.fetchone()
+    finally:
+        conn.close()
+    return row["messages"] if row else None
+
+
+def db_delete_conversation(conv_id: str, user_id: str = ""):
+    user_id = user_id or get_current_user()
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            "DELETE FROM chat_conversations WHERE conv_id = ? AND user_id = ?",
+            (conv_id, user_id),
+        )
+        conn.commit()
+    finally:
+        conn.close()
