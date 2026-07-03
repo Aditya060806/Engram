@@ -56,6 +56,12 @@ const faqs = [
 
 const SOURCES = ["GitHub", "PDF", "ChatGPT", "Claude", "Articles", "YouTube", "Notes", "Transcripts", "Web pages"];
 
+const DEMO_QA = [
+  { q: "What database are we using?", a: "You switched from Postgres to Supabase on Nov 20 for built-in auth and realtime. The earlier Postgres decision is now superseded.", source: "adr_v4.pdf", tag: "supersedes", tint: T.amber },
+  { q: "What changed since last week?", a: "Two updates: deploys moved from weekly to on-merge, and the database choice was reconciled to Supabase. One stale node about weekly deploys was pruned.", source: "reconciliation log", tag: "diff", tint: T.sky },
+  { q: "Who is the groom?", a: "Doug is the groom and the wedding is on Sunday. Remembered from your notes and recalled across sessions.", source: "vegas_notes.txt", tag: "recall", tint: T.mint },
+];
+
 const HEAD_LINE_1 = ["Memory", "that", "knows"];
 const HEAD_LINE_2 = ["when", "to"];
 const HEAD_ACCENT = ["update", "itself"];
@@ -363,6 +369,18 @@ export default function LandingPage() {
         </div>
       </section>
 
+      {/* ═══════ ASK DEMO ═══════ */}
+      <section id="try" className="px-5 sm:px-6 py-20 sm:py-24 border-t border-hairline">
+        <div className="max-w-[900px] mx-auto">
+          <Reveal className="max-w-2xl mb-8 sm:mb-10">
+            <p className="caption-upper text-muted">See it think</p>
+            <h2 className="display-lg mt-3">Ask your memory. Get a grounded answer.</h2>
+            <p className="mt-4 text-body text-base sm:text-lg leading-relaxed">A quick taste of recall. Type a question or pick one, and watch Engram answer from the graph, with the source it used.</p>
+          </Reveal>
+          <Reveal><AskDemo /></Reveal>
+        </div>
+      </section>
+
       {/* ═══════ FEATURES ═══════ */}
       <section id="features" className="px-5 sm:px-6 py-20 sm:py-24 border-t border-hairline">
         <div className="max-w-[1180px] mx-auto">
@@ -555,6 +573,96 @@ export default function LandingPage() {
 
 function IconChip({ tint, children }: { tint: string; children: React.ReactNode }) {
   return <div className="w-11 h-11 rounded-xl flex items-center justify-center" style={chip(tint)}>{children}</div>;
+}
+
+function AskDemo() {
+  const [value, setValue] = useState("");
+  const [answer, setAnswer] = useState<(typeof DEMO_QA)[number] | null>(null);
+  const [typed, setTyped] = useState("");
+  const [asked, setAsked] = useState("");
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const run = (q: string) => {
+    const query = q.trim();
+    if (!query) return;
+    const lower = query.toLowerCase();
+    const match =
+      (lower.includes("database") || lower.includes("postgres") || lower.includes("supabase") ? DEMO_QA[0] : null) ||
+      (lower.includes("chang") || lower.includes("diff") || lower.includes("week") ? DEMO_QA[1] : null) ||
+      (lower.includes("groom") || lower.includes("doug") || lower.includes("wedding") ? DEMO_QA[2] : null) ||
+      DEMO_QA[0];
+    setAsked(query);
+    setValue("");
+    setAnswer(match);
+    setTyped("");
+    if (timerRef.current) clearInterval(timerRef.current);
+    let i = 0;
+    timerRef.current = setInterval(() => {
+      i += 2;
+      setTyped(match.a.slice(0, i));
+      if (i >= match.a.length && timerRef.current) clearInterval(timerRef.current);
+    }, 16);
+  };
+
+  useEffect(() => () => { if (timerRef.current) clearInterval(timerRef.current); }, []);
+
+  const isTyping = answer !== null && typed.length < answer.a.length;
+
+  return (
+    <div className="rounded-3xl border border-hairline bg-surface-card p-4 sm:p-6 shadow-[0_10px_40px_-22px_rgba(0,0,0,0.25)]">
+      <div className="min-h-[140px] rounded-2xl bg-surface-strong/30 border border-hairline p-4 sm:p-5">
+        {answer ? (
+          <div>
+            <div className="flex items-center gap-2 mb-3">
+              <span className="w-6 h-6 rounded-full bg-ink text-canvas flex items-center justify-center text-[10px] font-semibold shrink-0">You</span>
+              <span className="text-[14px] font-medium text-ink">{asked}</span>
+            </div>
+            <div className="flex items-start gap-2.5">
+              <Image src="/logo.png" alt="" width={24} height={24} className="object-contain rounded-md mt-0.5 shrink-0" />
+              <div className="flex-1 min-w-0">
+                <p className={`text-[14px] text-body leading-relaxed ${isTyping ? "caret" : ""}`}>{typed}</p>
+                {!isTyping && (
+                  <div className="mt-3 flex flex-wrap items-center gap-2">
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-hairline bg-surface-card text-[11px] font-medium text-body">
+                      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><path d="M14 2v6h6" /></svg>
+                      {answer.source}
+                    </span>
+                    <span className="px-2.5 py-1 rounded-full text-[11px] font-semibold" style={chip(answer.tint)}>{answer.tag}</span>
+                    <span className="text-[11px] text-muted-soft">via cognee · graph-completion</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="h-full flex items-center justify-center text-center py-6">
+            <p className="text-[13px] text-muted-soft max-w-xs">Ask something below, or tap a suggestion. This is a live-typed demo of graph-grounded recall.</p>
+          </div>
+        )}
+      </div>
+
+      <form onSubmit={(e) => { e.preventDefault(); run(value); }} className="mt-3 flex items-center gap-2">
+        <input
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          placeholder="Ask your memory anything…"
+          className="ring-focus flex-1 px-4 py-3 rounded-full bg-surface-card border border-hairline text-[14px] text-ink placeholder:text-muted-soft transition-all min-w-0"
+        />
+        <button type="submit" className="tap shrink-0 inline-flex items-center gap-1.5 px-5 py-3 rounded-full bg-ink text-canvas text-[14px] font-semibold hover:opacity-90 transition-opacity cursor-pointer">
+          Ask
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M13 6l6 6-6 6" /></svg>
+        </button>
+      </form>
+
+      <div className="mt-3 flex flex-wrap gap-2">
+        {DEMO_QA.map((d) => (
+          <button key={d.q} onClick={() => run(d.q)} className="tap-sm px-3 py-1.5 rounded-full border border-hairline bg-surface-strong/40 text-[12.5px] font-medium text-body hover:text-ink hover:border-hairline-strong transition-colors cursor-pointer">
+            {d.q}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
 }
 
 function SoundIcon({ on }: { on: boolean }) {

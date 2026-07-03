@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import EmptyState from "@/components/EmptyState";
+import Spinner from "@/components/Spinner";
 import { getConflictEvents, resolveConflict } from "@/lib/api";
 import type { ConflictEvent } from "@/lib/types";
 import { useToast } from "@/context/ToastContext";
@@ -176,9 +177,10 @@ export default function ResolvePage() {
                 <button
                   onClick={() => handleResolve(conflict.id, "keep_new")}
                   disabled={resolving === conflict.id}
-                  className="px-5 py-2.5 rounded-full bg-primary text-on-primary text-[14px] font-medium hover:bg-primary-active active:scale-[0.98] transition-all duration-150 cursor-pointer disabled:opacity-40"
+                  className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-primary text-on-primary text-[14px] font-medium hover:bg-primary-active active:scale-[0.96] transition-all duration-150 cursor-pointer disabled:opacity-60"
                 >
-                  Keep New
+                  {resolving === conflict.id && <Spinner />}
+                  {resolving === conflict.id ? "Resolving…" : "Keep New"}
                 </button>
                 <button
                   onClick={() => handleResolve(conflict.id, "keep_old")}

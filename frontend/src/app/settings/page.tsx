@@ -7,6 +7,7 @@ import { useIngestion } from "@/context/IngestionContext";
 import { useToast } from "@/context/ToastContext";
 import { useAIConfig } from "@/context/AIConfigContext";
 import CountUp from "@/components/CountUp";
+import Spinner from "@/components/Spinner";
 
 function formatDate(iso: string) {
   try {
@@ -33,6 +34,7 @@ export default function SettingsPage() {
   const [forgetThreshold, setForgetThreshold] = useState(180);
   const [searchQuery, setSearchQuery] = useState("");
   const [decayRunning, setDecayRunning] = useState(false);
+  const [forgettingSelected, setForgettingSelected] = useState(false);
   const [improving, setImproving] = useState(false);
   const [sources, setSources] = useState<Source[]>([]);
   const [searchResults, setSearchResults] = useState<{ id: string; label: string; confidence: number; status: string }[]>([]);
@@ -178,7 +180,8 @@ export default function SettingsPage() {
 
   const handleForgetSelected = useCallback(async () => {
     const ids = Array.from(selectedNodeIds);
-    if (ids.length === 0) return;
+    if (ids.length === 0 || forgettingSelected) return;
+    setForgettingSelected(true);
     try {
       await Promise.all(ids.map((id) => forgetNode(id)));
       setSelectedNodeIds(new Set());
@@ -186,8 +189,10 @@ export default function SettingsPage() {
       addToast(`Successfully forgot ${ids.length} nodes`, "success");
     } catch {
       addToast("Failed to forget selected nodes", "error");
+    } finally {
+      setForgettingSelected(false);
     }
-  }, [selectedNodeIds, addToast]);
+  }, [selectedNodeIds, addToast, forgettingSelected]);
 
   if (loading) {
     return (
@@ -378,10 +383,11 @@ export default function SettingsPage() {
 
             <button
               onClick={handleForgetSelected}
-              disabled={selectedNodeIds.size === 0}
-              className="px-5 py-2.5 rounded-full bg-semantic-error/10 border border-semantic-error/20 text-semantic-error text-[14px] font-semibold hover:bg-semantic-error/20 active:scale-[0.98] disabled:opacity-30 transition-all duration-150 cursor-pointer"
+              disabled={selectedNodeIds.size === 0 || forgettingSelected}
+              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-semantic-error/10 border border-semantic-error/20 text-semantic-error text-[14px] font-semibold hover:bg-semantic-error/20 active:scale-[0.96] disabled:opacity-30 transition-all duration-150 cursor-pointer"
             >
-              Forget selected ({selectedNodeIds.size})
+              {forgettingSelected && <Spinner />}
+              {forgettingSelected ? "Forgetting…" : `Forget selected (${selectedNodeIds.size})`}
             </button>
           </div>
         </section>

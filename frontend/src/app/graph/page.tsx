@@ -442,13 +442,17 @@ export default function GraphPage() {
 
   const handleForgetNode = useCallback(async () => {
     if (!selectedNode) return;
+    const id = selectedNode.id;
     try {
-      await forgetNode(selectedNode.id);
-      setNodes((prev) => prev.filter((n) => n.id !== selectedNode.id));
-      setEdges((prev) => prev.filter((e) => e.source !== selectedNode.id && e.target !== selectedNode.id));
+      await forgetNode(id);
+      setNodes((prev) => prev.filter((n) => n.id !== id));
+      setEdges((prev) => prev.filter((e) => e.source !== id && e.target !== id));
       setSelectedNode(null);
-    } catch {}
-  }, [selectedNode]);
+      addToast("Node forgotten", "success");
+    } catch {
+      addToast("Failed to forget node", "error");
+    }
+  }, [selectedNode, addToast]);
 
   const nodeThreeObject = useCallback(
     (node: any) => {
