@@ -71,22 +71,32 @@ from database import (  # noqa: E402
     db_update_decay_settings,
     db_update_source_content,
     db_get_source_content,
+    db_update_source_cognee_id,
+    db_get_source_cognee_id,
     db_get_user_ai_config,
 )
 db_init()
 
-# Cognee Activity Logger for the Live Terminal UI Feed
-cognee_activities: list[dict] = []
+# Cognee Activity Logger for the Live Terminal UI Feed.
+# Keyed per user so one user's activity never leaks into another's console feed.
+_cognee_activities_by_user: dict[str, list[dict]] = {}
+_ACTIVITY_LIMIT = 30
 
 def log_cognee_activity(operation: str, details: str):
-    timestamp = datetime.now(timezone.utc).isoformat()
-    cognee_activities.append({
-        "timestamp": timestamp,
+    uid = get_current_user() or "_system"
+    bucket = _cognee_activities_by_user.setdefault(uid, [])
+    bucket.append({
+        "timestamp": datetime.now(timezone.utc).isoformat(),
         "operation": operation,
-        "details": details
+        "details": details,
     })
-    if len(cognee_activities) > 30:
-        cognee_activities.pop(0)
+    if len(bucket) > _ACTIVITY_LIMIT:
+        bucket.pop(0)
+    # Bound total memory: cap the number of tracked users.
+    if len(_cognee_activities_by_user) > 500:
+        oldest = next(iter(_cognee_activities_by_user))
+        if oldest != uid:
+            _cognee_activities_by_user.pop(oldest, None)
 
 # Provider: "gemini" (primary) or "groq" (fallback)
 LLM_PROVIDER = os.environ.get("LLM_PROVIDER", "gemini")
@@ -378,9 +388,26 @@ async def fetch_github_repo_content(repo_url: str, path_filter: Optional[str] = 
     repo = parts[4]
     
     headers = _github_headers()
-    
+
+    # Resolve the repo's actual default branch first, then fall back to the
+    # common ones. Repos whose default branch is not main/master (e.g. develop,
+    # trunk) previously failed outright.
+    branches: list[str] = []
+    try:
+        async with httpx.AsyncClient(follow_redirects=True, timeout=15.0) as client:
+            info = await client.get(f"https://api.github.com/repos/{owner}/{repo}", headers=headers)
+            if info.status_code == 200:
+                default_branch = info.json().get("default_branch")
+                if default_branch:
+                    branches.append(default_branch)
+    except Exception as e:
+        print(f"[Scraper] default branch lookup failed: {e}", flush=True)
+    for b in ("main", "master"):
+        if b not in branches:
+            branches.append(b)
+
     zip_content = None
-    for branch in ["main", "master"]:
+    for branch in branches:
         zip_url = f"https://github.com/{owner}/{repo}/archive/refs/heads/{branch}.zip"
         try:
             async with httpx.AsyncClient(follow_redirects=True, timeout=30.0) as client:
@@ -392,7 +419,10 @@ async def fetch_github_repo_content(repo_url: str, path_filter: Optional[str] = 
             print(f"[Scraper] Failed to download zip for branch {branch}: {e}", flush=True)
 
     if not zip_content:
-        raise ValueError("Could not download repository zip archive from main or master branch")
+        raise ValueError(
+            "Could not download the repository zip. Check that the URL is correct and the "
+            "repository is public (private repos need a configured GITHUB_TOKEN)."
+        )
         
     valid_exts = {".md", ".txt", ".py", ".js", ".jsx", ".ts", ".tsx", ".json", ".html", ".css", ".go", ".rs", ".yml", ".yaml"}
     concatenated = []
@@ -430,7 +460,9 @@ async def fetch_github_repo_content(repo_url: str, path_filter: Optional[str] = 
                         continue
                         
                     with z.open(file_info) as f:
-                        file_content = f.read().decode("utf-8", errors="ignore")
+                        # Strip NUL (0x00): valid in some files but rejected by
+                        # Postgres TEXT columns (and Cognee's store).
+                        file_content = f.read().decode("utf-8", errors="ignore").replace("\x00", "")
                         if not file_content.strip() or len(file_content) > 100000:
                             continue
                         concatenated.append(f"--- FILE: {path} ---\n{file_content}\n")
@@ -584,7 +616,13 @@ async def run_ingest_background(job_id: str, source: Source, req: IngestRequest,
             content = fetch_article_content(req.url)
         else:
             content = req.content
-            
+
+        # Postgres TEXT columns (and the Cognee store) reject NUL (0x00) bytes,
+        # which can appear in any ingested source. Strip them once here so every
+        # downstream write (metadata DB + Cognee remember) is safe.
+        if content:
+            content = content.replace("\x00", "")
+
         _touch_job(job_id, currentStep="extracting", progress=30)
         db_update_source_content(source.id, content)
 
@@ -610,15 +648,28 @@ async def run_ingest_background(job_id: str, source: Source, req: IngestRequest,
                         # add_text + cognify path if the tenant rejects the graph model.
                         try:
                             from graph_model import ENGRAM_GRAPH_MODEL, ENGRAM_CUSTOM_PROMPT
+                            # Deterministic filename ties this source to a stable
+                            # Cognee data item so forget() can later prune by exact id.
+                            data_filename = f"engram_{source.id}.md"
                             await client.remember(
                                 full,
                                 get_cognee_dataset(),
-                                filename=f"{req.label[:60] or 'note'}.md",
+                                filename=data_filename,
                                 graph_model=ENGRAM_GRAPH_MODEL,
                                 custom_prompt=ENGRAM_CUSTOM_PROMPT,
                                 run_in_background=True,
                             )
                             log_cognee_activity("remember()", f"[Cloud] Ingested '{req.label}' with typed ontology (Fact/Decision/Topic)")
+                            # Resolve and persist the tenant data-item UUID (exact
+                            # name match), so pruning is deterministic, not fuzzy.
+                            try:
+                                ds_id = await client.dataset_id_for(get_cognee_dataset())
+                                if ds_id:
+                                    resolved = await client.data_id_for(ds_id, data_filename)
+                                    if resolved:
+                                        db_update_source_cognee_id(source.id, resolved)
+                            except Exception as rid_err:
+                                print(f"[Cognee Cloud] could not resolve data id for '{req.label}' ({rid_err})", flush=True)
                             return
                         except Exception as typed_err:
                             print(f"[Cognee Cloud] typed remember() failed ({typed_err}); using add_text + cognify.", flush=True)
@@ -1263,9 +1314,11 @@ async def answer_query(req: RecallRequest) -> ChatMessage:
 
     intent: str = "standard"
     correlation_keywords = {"connect", "connection", "connections", "correlate", "correlation", "link", "linked", "relationship", "related"}
+    changed_phrases = ("what changed", "whats changed", "what's changed", "what has changed",
+                       "changed since", "changed about", "any changes", "what updated", "what's new", "whats new")
     if any(k in query for k in correlation_keywords):
         intent = "cross_correlation"
-    elif "changed" in query:
+    elif any(p in query for p in changed_phrases):
         intent = "what_changed"
     elif "believe" in query or "timeline" in query or "before" in query or "before vs" in query:
         intent = "temporal_belief"
@@ -1542,13 +1595,14 @@ async def answer_query(req: RecallRequest) -> ChatMessage:
     provider_val: Optional[str] = None
     model_val: Optional[str] = None
     try:
+        _sid = get_session_id()
         await remember_chat_turn(
-            session_id="default_session",
+            session_id=_sid,
             question=req.query,
             answer=answer,
             context=json.dumps([s.label for s in sources_list]),
         )
-        entries = await get_session_history(session_id="default_session", last_n=1)
+        entries = await get_session_history(session_id=_sid, last_n=1)
         if entries:
             qa_id_val = entries[0].get("qa_id")
         # Attribute the answer: Cognee when it answered from the graph, otherwise the fallback LLM.
@@ -1583,7 +1637,102 @@ async def answer_query(req: RecallRequest) -> ChatMessage:
     )
 
 
+def _graph_node_text(n: dict) -> str:
+    """Human-readable text for a graph node (Fact/Decision/Topic)."""
+    props = n.get("properties") or {}
+    for k in ("statement", "name", "description", "title"):
+        v = props.get(k)
+        if isinstance(v, str) and v.strip():
+            return v.strip()
+    label = n.get("label")
+    return label.strip() if isinstance(label, str) and label.strip() else ""
+
+
+async def reconcile_from_graph() -> int:
+    """Read `supersedes` / `contradicts` edges straight from the Cognee graph and
+    turn them into ConflictEvents. This makes Cognee itself the contradiction
+    detector (the LLM pass in run_reconciliation becomes a secondary detector),
+    and makes the typed ontology visibly pay off in the /resolve inbox.
+    Returns the number of new conflicts created."""
+    if not cognee_cloud_active():
+        return 0
+    from cognee_cloud import get_cloud_client
+    client = get_cloud_client()
+    if not client:
+        return 0
+    try:
+        ds_id = await client.dataset_id_for(get_cognee_dataset())
+        if not ds_id:
+            return 0
+        g = await client.dataset_graph(ds_id)
+    except Exception as e:
+        print(f"[Cognee Cloud] reconcile_from_graph fetch failed ({e})", flush=True)
+        return 0
+    if not isinstance(g, dict):
+        return 0
+
+    nodes = {str(n.get("id")): n for n in g.get("nodes", [])}
+    edges = g.get("edges", []) or []
+    domain_types = {"Fact", "Decision", "Topic", "Entity", "Source"}
+
+    # Map each node to its topic via its about_topic edge (nicer conflict topics).
+    topic_of: dict[str, str] = {}
+    for e in edges:
+        if (e.get("label") or "").lower() == "about_topic":
+            tgt = nodes.get(str(e.get("target")))
+            if tgt:
+                topic_of[str(e.get("source"))] = _graph_node_text(tgt)
+
+    existing = db_get_conflicts(include_resolved=True)
+    seen = {(c.topic, c.oldNodeSummary, c.newNodeSummary) for c in existing}
+    now = datetime.now(timezone.utc).isoformat()
+    created = 0
+
+    for e in edges:
+        label = (e.get("label") or "").lower()
+        is_supersede = "supersede" in label
+        is_contradict = "contradict" in label
+        if not (is_supersede or is_contradict):
+            continue
+        src = nodes.get(str(e.get("source")))
+        tgt = nodes.get(str(e.get("target")))
+        if not src or not tgt:
+            continue
+        if src.get("type") not in domain_types or tgt.get("type") not in domain_types:
+            continue
+        # supersedes: source supersedes target -> source is the new/current claim.
+        new_summary = _graph_node_text(src)
+        old_summary = _graph_node_text(tgt)
+        if not new_summary or not old_summary or new_summary == old_summary:
+            continue
+        topic = topic_of.get(str(e.get("source"))) or topic_of.get(str(e.get("target"))) or new_summary[:60]
+        key = (topic, old_summary, new_summary)
+        if key in seen:
+            continue
+        seen.add(key)
+        db_save_conflict(ConflictEvent(
+            id="cg_" + str(uuid.uuid4())[:10],
+            oldNodeSummary=old_summary, oldNodeDate=now, oldNodeSource="Cognee graph",
+            newNodeSummary=new_summary, newNodeDate=now, newNodeSource="Cognee graph",
+            topic=topic, relationship=("supersedes" if is_supersede else "contradicts"),
+            llmConfidence=0.85, status="pending", resolutionNote=None, createdAt=now,
+        ))
+        created += 1
+
+    if created:
+        log_cognee_activity("recall()", f"[Cloud] Detected {created} contradiction(s) from the graph")
+    return created
+
+
 async def get_conflict_events() -> list[ConflictEvent]:
+    # Refresh graph-derived contradictions periodically (cached ~45s) so Cognee
+    # itself drives the reconciliation inbox, not only the side-channel LLM pass.
+    if cognee_cloud_active() and memory_cache.get(_cache_key("graph_reconcile")) is None:
+        memory_cache.set(_cache_key("graph_reconcile"), True, ttl=45)
+        try:
+            await reconcile_from_graph()
+        except Exception as e:
+            print(f"[Cognee Cloud] graph reconcile error ({e})", flush=True)
     return db_get_conflicts(include_resolved=True)
 
 
@@ -1616,14 +1765,8 @@ async def resolve_conflict(req: ResolveRequest) -> None:
                     valueSummary=c.oldNodeSummary, confidenceScore=0.10,
                     reason="superseded", date=now
                 ))
-                # Forget the old superseded node in Cognee
-                if COGNEE_READY:
-                    apply_cognee_llm_config()
-                    try:
-                        await cognee.forget(data_id=c.oldNodeSummary, dataset=get_cognee_dataset())
-                        log_cognee_activity("forget()", f"Pruned superseded old claim on '{c.topic}'")
-                    except Exception as err:
-                        print(f"[Cognee] failed to forget superseded old node: {err}", flush=True)
+                # Forget the old superseded claim in Cognee (cloud-first).
+                await _forget_claims([c.oldNodeSummary], c.topic)
             elif req.resolution == "keep_old":
                 db_save_reconciliation_log_entry(ReconciliationLogEntry(
                     id=log_id, eventType="removed", topic=c.topic,
@@ -1640,14 +1783,8 @@ async def resolve_conflict(req: ResolveRequest) -> None:
                     valueSummary=c.newNodeSummary, confidenceScore=0.10,
                     reason="superseded", date=now
                 ))
-                # Forget the new rejected node in Cognee
-                if COGNEE_READY:
-                    apply_cognee_llm_config()
-                    try:
-                        await cognee.forget(data_id=c.newNodeSummary, dataset=get_cognee_dataset())
-                        log_cognee_activity("forget()", f"Pruned rejected new claim on '{c.topic}'")
-                    except Exception as err:
-                        print(f"[Cognee] failed to forget rejected new node: {err}", flush=True)
+                # Forget the new rejected claim in Cognee (cloud-first).
+                await _forget_claims([c.newNodeSummary], c.topic)
             elif req.resolution == "keep_both":
                 db_save_reconciliation_log_entry(ReconciliationLogEntry(
                     id=log_id, eventType="added", topic=c.topic,
@@ -1666,6 +1803,44 @@ async def resolve_conflict(req: ResolveRequest) -> None:
                     reason="reinforced", date=now
                 ))
             return
+
+
+async def _forget_claims(summaries: list[str], topic: str) -> None:
+    """Prune claims from whichever backend is active. On Cloud we resolve each
+    claim to a tenant data item and forget it by dataId (best-effort name match);
+    this is what lets decay sweeps and reconciliation reach the hosted graph
+    rather than only the local store. Never forgets the whole dataset."""
+    if cognee_cloud_active():
+        from cognee_cloud import get_cloud_client
+        client = get_cloud_client()
+        if client:
+            try:
+                ds_id = await client.dataset_id_for(get_cognee_dataset())
+                pruned = 0
+                if ds_id:
+                    for s in summaries:
+                        if not s:
+                            continue
+                        data_id = await client.data_id_for(ds_id, s)
+                        if data_id:
+                            await client.forget(data_id=data_id)
+                            pruned += 1
+                if pruned:
+                    log_cognee_activity("forget()", f"[Cloud] Pruned {pruned} item(s) for '{topic}'")
+                else:
+                    log_cognee_activity("forget()", f"[Cloud] No matching data item for '{topic}' (claim-level prune is best-effort); skipped")
+                return
+            except Exception as e:
+                print(f"[Cognee Cloud] claim forget failed ({e}); trying local SDK.", flush=True)
+    if COGNEE_READY:
+        apply_cognee_llm_config()
+        try:
+            for s in summaries:
+                if s:
+                    await cognee.forget(data_id=s, dataset=get_cognee_dataset())
+            log_cognee_activity("forget()", f"Pruned stale claims on '{topic}'")
+        except Exception as err:
+            print(f"[Cognee] claim forget failed for {topic}: {err}", flush=True)
 
 
 async def run_decay_check(user_id: str = "") -> DecayResult:
@@ -1716,14 +1891,7 @@ async def run_decay_check(user_id: str = "") -> DecayResult:
         if new_confidence < 0.20:
             c.status = "forgotten"
             forgotten += 1
-            if COGNEE_READY:
-                apply_cognee_llm_config()
-                try:
-                    await cognee.forget(data_id=c.oldNodeSummary, dataset=get_cognee_dataset())
-                    await cognee.forget(data_id=c.newNodeSummary, dataset=get_cognee_dataset())
-                    log_cognee_activity("forget()", f"Pruned decayed stale claims on '{c.topic}'")
-                except Exception as err:
-                    print(f"[Cognee] decay forget failed for {c.topic}: {err}", flush=True)
+            await _forget_claims([c.oldNodeSummary, c.newNodeSummary], c.topic)
         elif new_confidence < original_confidence:
             decayed += 1
         
@@ -1817,46 +1985,93 @@ async def search_nodes(query: str) -> list[NodeSearchResult]:
     return results
 
 
-async def forget_node(node_id: str) -> None:
+async def forget_node(node_id: str) -> dict:
+    """Prune a single node, cloud-first (consistent with every other lifecycle
+    op) with a local SDK fallback. Returns an honest status so the caller knows
+    whether the prune actually happened."""
+    result = {"status": "ok", "backend": "none", "pruned": False}
+    # Cloud-first: resolve the node to a tenant data item and forget it.
+    if cognee_cloud_active():
+        from cognee_cloud import get_cloud_client
+        client = get_cloud_client()
+        if client:
+            try:
+                ds_id = await client.dataset_id_for(get_cognee_dataset())
+                data_id = await client.data_id_for(ds_id, node_id) if ds_id else None
+                if data_id:
+                    await client.forget(dataset_name=get_cognee_dataset(), data_id=data_id)
+                    result.update(backend="cloud", pruned=True)
+                    log_cognee_activity("forget()", f"[Cloud] Pruned node '{node_id[:20]}' from tenant")
+                else:
+                    result.update(backend="cloud", status="skipped")
+                    log_cognee_activity("forget()", f"[Cloud] Could not resolve node '{node_id[:20]}'; skipped")
+                memory_cache.invalidate(_cache_key("graph_snapshot"))
+                return result
+            except Exception as e:
+                print(f"[Cognee Cloud] forget node failed ({e}); trying local SDK.", flush=True)
     if COGNEE_READY:
         apply_cognee_llm_config()
         try:
             await cognee.forget(data_id=node_id, dataset=get_cognee_dataset())
+            result.update(backend="local", pruned=True)
             log_cognee_activity("forget()", f"Pruned node ID '{node_id[:20]}' from graph")
         except Exception as cognee_err:
+            result["status"] = "error"
             print(f"[Cognee] forget failed: {cognee_err}", flush=True)
     memory_cache.invalidate(_cache_key("graph_snapshot"))
+    return result
 
 
-async def forget_source(source_id: str) -> None:
+async def forget_source(source_id: str) -> dict:
+    """Remove a source from the user's list and prune it from the memory backend.
+    Attempts the backend prune first (cloud-first), then always removes the local
+    record so the user's delete intent is honored, and reports an honest status."""
     db_sources = db_get_sources()
     target_source = next((s for s in db_sources if s.id == source_id), None)
-    if target_source:
-        db_delete_source(source_id)
-        if cognee_cloud_active():
-            from cognee_cloud import get_cloud_client
-            client = get_cloud_client()
-            if client:
-                try:
+    if not target_source:
+        return {"status": "not_found", "backend": "none", "pruned": False}
+
+    result = {"status": "ok", "backend": "none", "pruned": False}
+    # Attempt to prune from the active memory backend before removing locally.
+    if cognee_cloud_active():
+        from cognee_cloud import get_cloud_client
+        client = get_cloud_client()
+        if client:
+            try:
+                # Prefer the exact data-item UUID stored at ingest; only fall back
+                # to name resolution for older sources ingested before this existed.
+                data_id = db_get_source_cognee_id(source_id)
+                if not data_id:
                     ds_id = await client.dataset_id_for(get_cognee_dataset())
                     if ds_id:
-                        data_id = await client.data_id_for(ds_id, target_source.label)
-                        if data_id:
-                            await client.forget(dataset_name=get_cognee_dataset(), data_id=data_id)
-                            log_cognee_activity("forget()", f"[Cloud] Pruned '{target_source.label}' from tenant")
-                        else:
-                            log_cognee_activity("forget()", f"[Cloud] Could not resolve '{target_source.label}' on tenant; skipped")
-                except Exception as e:
-                    print(f"[Cognee Cloud] forget failed ({e})", flush=True)
-        elif COGNEE_READY:
-            apply_cognee_llm_config()
-            try:
-                await cognee.forget(dataset=get_cognee_dataset(), data_id=target_source.label)
-                log_cognee_activity("forget()", f"Pruned source document '{target_source.label}'")
-            except Exception:
-                pass
+                        data_id = await client.data_id_for(ds_id, f"engram_{source_id}.md")
+                        if not data_id:
+                            data_id = await client.data_id_for(ds_id, target_source.label)
+                if data_id:
+                    await client.forget(dataset_name=get_cognee_dataset(), data_id=data_id)
+                    result.update(backend="cloud", pruned=True)
+                    log_cognee_activity("forget()", f"[Cloud] Pruned '{target_source.label}' from tenant")
+                else:
+                    result.update(backend="cloud", status="skipped")
+                    log_cognee_activity("forget()", f"[Cloud] Could not resolve '{target_source.label}' on tenant; skipped")
+            except Exception as e:
+                result["status"] = "error"
+                print(f"[Cognee Cloud] forget failed ({e})", flush=True)
+    elif COGNEE_READY:
+        apply_cognee_llm_config()
+        try:
+            await cognee.forget(dataset=get_cognee_dataset(), data_id=target_source.label)
+            result.update(backend="local", pruned=True)
+            log_cognee_activity("forget()", f"Pruned source document '{target_source.label}'")
+        except Exception as e:
+            result["status"] = "error"
+            print(f"[Cognee] forget source failed ({e})", flush=True)
+
+    # Always honor the user's delete intent on the local source list.
+    db_delete_source(source_id)
     memory_cache.invalidate(_cache_key("sources"))
     memory_cache.invalidate(_cache_key("graph_snapshot"))
+    return result
 
 
 def _sanitize_provenance_html(html: str) -> str:
@@ -1966,6 +2181,38 @@ async def get_session_history(session_id: str = "default_session", last_n: int |
         return []
 
 
+def _guidance_from_metadata(session_id: str = "default_session") -> dict:
+    """Build lightweight, real "Engram has noticed" insights from the per-user
+    reconciliation log and pending conflicts. Used on the Cloud path where SDK
+    session distillation is unavailable."""
+    documents: list[str] = []
+    try:
+        conflicts = db_get_conflicts(include_resolved=True)
+        pending = [c for c in conflicts if c.status == "pending"]
+        resolved = [c for c in conflicts if c.status.startswith("resolved")]
+        if pending:
+            top = pending[0]
+            documents.append(
+                f"{len(pending)} contradiction{'s' if len(pending) != 1 else ''} awaiting review, "
+                f"e.g. \"{top.topic}\": {top.newNodeSummary} vs {top.oldNodeSummary}."
+            )
+        for c in resolved[:2]:
+            documents.append(
+                f"Reconciled \"{c.topic}\": {c.newNodeSummary} now supersedes {c.oldNodeSummary}."
+            )
+        log = db_get_reconciliation_log()
+        for entry in log[:2]:
+            if entry.newSummary:
+                documents.append(f"Recent update on \"{entry.topic}\": {entry.newSummary}.")
+    except Exception as e:
+        log_cognee_activity("guidance_metadata_error", str(e))
+    return {
+        "session_id": session_id,
+        "status": "ok" if documents else "empty",
+        "documents": documents[:3],
+    }
+
+
 async def get_session_guidance(session_id: str = "default_session") -> dict:
     if not COGNEE_READY:
         return {"goals": [], "rules": [], "preferences": [], "lessons_learned": []}
@@ -1973,11 +2220,12 @@ async def get_session_guidance(session_id: str = "default_session") -> dict:
     # so distillation would 422. Skip quietly until there is something to distill.
     if not db_get_sources():
         return {"session_id": session_id, "status": "empty", "documents": []}
-    # Session distillation uses the local SDK session store. When routed to a hosted
-    # Cognee Cloud tenant, dataset ownership differs under multi-tenant access control,
-    # so the call 422s on every poll. Skip quietly rather than spam errors.
+    # Session distillation uses the local SDK session store. Under a hosted Cognee
+    # Cloud tenant, dataset ownership differs with multi-tenant access control, so
+    # distill_session 422s. Instead of showing nothing, derive real guidance from
+    # the reconciliation log and pending conflicts we already track per user.
     if cognee_cloud_active():
-        return {"session_id": session_id, "status": "empty", "documents": []}
+        return _guidance_from_metadata(session_id)
     apply_cognee_llm_config()
     try:
         result = await cognee.session.distill_session(
@@ -2011,25 +2259,64 @@ async def add_session_feedback(session_id: str, qa_id: str, feedback_text: str |
 
 
 async def remember_chat_turn(session_id: str, question: str, answer: str, context: str = "") -> bool:
-    if not COGNEE_READY:
-        return False
-    apply_cognee_llm_config()
-    try:
-        qa_entry = cognee.QAEntry(
-            question=question,
-            answer=answer,
-            context=context,
-        )
-        await cognee.remember(
-            data=qa_entry,
-            session_id=session_id,
-            dataset_name=get_cognee_dataset(),
-        )
-        log_cognee_activity("session_remember", f"Stored chat turn in session '{session_id}'")
-        return True
-    except Exception as e:
-        log_cognee_activity("session_remember_error", str(e))
-        return False
+    """Persist a completed conversation turn as durable memory, so a future
+    session can recall what was discussed. On Cloud the turn is written into the
+    knowledge graph (typed), which is what makes "remembers every conversation
+    across infinite sessions" true rather than aspirational."""
+    ok = False
+
+    # 1) Write the turn into the hosted graph so it is recallable across sessions.
+    if cognee_cloud_active():
+        from cognee_cloud import get_cloud_client
+        client = get_cloud_client()
+        if client:
+            try:
+                from graph_model import ENGRAM_GRAPH_MODEL, ENGRAM_CUSTOM_PROMPT
+                now_dt = datetime.now(timezone.utc)
+                stamp = now_dt.strftime("%Y-%m-%d")
+                text = (
+                    f"[Conversation on {stamp} | session {session_id}]\n"
+                    f"Question: {question}\nAnswer: {answer}"
+                )
+                await client.ensure_dataset(get_cognee_dataset())
+                # Unique per turn so each conversation data item resolves to a
+                # distinct tenant id (a shared filename made data_id_for ambiguous).
+                turn_stamp = now_dt.strftime("%Y%m%d-%H%M%S-%f")
+                await client.remember(
+                    text,
+                    get_cognee_dataset(),
+                    filename=f"conversation_{session_id}_{turn_stamp}.md",
+                    graph_model=ENGRAM_GRAPH_MODEL,
+                    custom_prompt=ENGRAM_CUSTOM_PROMPT,
+                    run_in_background=True,
+                )
+                log_cognee_activity("remember()", f"[Cloud] Remembered conversation turn in session '{session_id}'")
+                ok = True
+            except Exception as e:
+                print(f"[Cognee Cloud] remember chat turn failed ({e}).", flush=True)
+
+    # 2) Always also record in the local SDK session store. This is the source of
+    #    truth for qa_id, session history, and the 👍/👎 feedback loop, so it must
+    #    run even on the cloud path (otherwise qa_id comes back None).
+    if COGNEE_READY:
+        apply_cognee_llm_config()
+        try:
+            qa_entry = cognee.QAEntry(
+                question=question,
+                answer=answer,
+                context=context,
+            )
+            await cognee.remember(
+                data=qa_entry,
+                session_id=session_id,
+                dataset_name=get_cognee_dataset(),
+            )
+            log_cognee_activity("session_remember", f"Stored chat turn in session '{session_id}'")
+            ok = True
+        except Exception as e:
+            log_cognee_activity("session_remember_error", str(e))
+
+    return ok
 
 
 async def import_chat_export(file_content: str, label: str = "Imported Chat") -> dict:
@@ -2313,7 +2600,8 @@ async def reset_demo_data() -> None:
     log_cognee_activity("seed", "Loaded demo dataset (sources, conflicts, timeline)")
 
 def get_cognee_activities() -> list[dict]:
-    return cognee_activities
+    uid = get_current_user() or "_system"
+    return _cognee_activities_by_user.get(uid, [])
 
 
 # ── Memory Recap: "Where's My Context?" ──
