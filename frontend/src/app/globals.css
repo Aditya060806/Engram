@@ -570,6 +570,14 @@ html.theme-transition *::after {
 @keyframes marquee {
   to { transform: translateX(-50%); }
 }
+/* Reverse direction row (seamless: starts shifted, moves back to 0) */
+.marquee-track.reverse {
+  animation-name: marquee-reverse;
+}
+@keyframes marquee-reverse {
+  from { transform: translateX(-50%); }
+  to   { transform: translateX(0); }
+}
 @media (prefers-reduced-motion: reduce) {
   .marquee-track { animation: none; }
 }

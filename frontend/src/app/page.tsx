@@ -54,13 +54,15 @@ const faqs = [
   { q: "Open source or hosted?", a: "Both. Engram is open source and runs locally by default, or routes remember, recall, improve and forget to a hosted Cognee Cloud tenant over REST, with automatic local fallback." },
 ];
 
-const SOURCES = ["GitHub", "PDF", "ChatGPT", "Claude", "Articles", "YouTube", "Notes", "Transcripts", "Web pages"];
+
 
 const DEMO_QA = [
   { q: "What database are we using?", a: "You switched from Postgres to Supabase on Nov 20 for built-in auth and realtime. The earlier Postgres decision is now superseded.", source: "adr_v4.pdf", tag: "supersedes", tint: T.amber },
   { q: "What changed since last week?", a: "Two updates: deploys moved from weekly to on-merge, and the database choice was reconciled to Supabase. One stale node about weekly deploys was pruned.", source: "reconciliation log", tag: "diff", tint: T.sky },
   { q: "Who is the groom?", a: "Doug is the groom and the wedding is on Sunday. Remembered from your notes and recalled across sessions.", source: "vegas_notes.txt", tag: "recall", tint: T.mint },
 ];
+
+
 
 const HEAD_LINE_1 = ["Memory", "that", "knows"];
 const HEAD_LINE_2 = ["when", "to"];
@@ -80,6 +82,24 @@ const Ic = {
   key: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="8" cy="15" r="4" /><path d="m10.8 12.2 8.2-8.2M17 5l2 2M15 7l2 2" /></svg>,
   grid: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5" /><rect x="14" y="3" width="7" height="7" rx="1.5" /><rect x="3" y="14" width="7" height="7" rx="1.5" /><rect x="14" y="14" width="7" height="7" rx="1.5" /></svg>,
 };
+
+type MItem = { label: string; img?: string; icon?: React.ReactNode; tint: string };
+const MARQUEE_A: MItem[] = [
+  { label: "GitHub", icon: Ic.github, tint: T.lavender },
+  { label: "specs.pdf", icon: Ic.pdf, tint: T.rose },
+  { label: "ChatGPT export", img: "/images/chat-gpt-icon.png", tint: T.mint },
+  { label: "Claude session", img: "/images/claude-icon.png", tint: T.peach },
+  { label: "Articles", icon: Ic.web, tint: T.sky },
+  { label: "YouTube", icon: Ic.youtube, tint: T.rose },
+];
+const MARQUEE_B: MItem[] = [
+  { label: "Notion notes", icon: Ic.notion, tint: T.sky },
+  { label: "Transcripts", icon: Ic.youtube, tint: T.amber },
+  { label: "Web pages", icon: Ic.web, tint: T.mint },
+  { label: "Gemini", img: "/images/gemini-icon.png", tint: T.lavender },
+  { label: "Repositories", icon: Ic.github, tint: T.peach },
+  { label: "PDF docs", icon: Ic.pdf, tint: T.rose },
+];
 
 /* ── Self-contained WebAudio UI sound (off by default) ── */
 function useUiSound() {
@@ -315,8 +335,12 @@ export default function LandingPage() {
       </section>
 
       {/* ═══════ MARQUEE ═══════ */}
-      <section className="py-7 sm:py-8 border-y border-hairline bg-surface-card/40 overflow-hidden">
-        <div className="edge-fade"><div className="marquee-track gap-3">{[...SOURCES, ...SOURCES].map((s, i) => (<span key={i} className="shrink-0 px-4 py-2 rounded-full border border-hairline bg-surface-card text-[13px] font-medium text-body">{s}</span>))}</div></div>
+      <section className="py-9 sm:py-11 border-y border-hairline bg-surface-card/40 overflow-hidden">
+        <p className="text-center caption-upper text-muted-soft mb-6">Everything you read, write, and build</p>
+        <div className="edge-fade space-y-3">
+          <MarqueeRow items={MARQUEE_A} duration={38} />
+          <MarqueeRow items={MARQUEE_B} duration={46} reverse />
+        </div>
       </section>
 
       {/* ═══════ STATS ═══════ */}
@@ -573,6 +597,25 @@ export default function LandingPage() {
 
 function IconChip({ tint, children }: { tint: string; children: React.ReactNode }) {
   return <div className="w-11 h-11 rounded-xl flex items-center justify-center" style={chip(tint)}>{children}</div>;
+}
+
+function MarqueeRow({ items, duration, reverse = false }: { items: MItem[]; duration: number; reverse?: boolean }) {
+  const doubled = [...items, ...items];
+  return (
+    <div className={`marquee-track gap-3 ${reverse ? "reverse" : ""}`} style={{ animationDuration: `${duration}s` }}>
+      {doubled.map((it, i) => (
+        <span
+          key={i}
+          className="tap-sm shrink-0 inline-flex items-center gap-2 pl-2 pr-4 py-1.5 rounded-full border border-hairline bg-surface-card text-[13px] font-medium text-body hover:text-ink hover:border-hairline-strong hover:shadow-[0_8px_24px_-12px_rgba(0,0,0,0.28)] transition-all duration-200"
+        >
+          <span className="w-6 h-6 rounded-full flex items-center justify-center shrink-0" style={chip(it.tint)}>
+            {it.img ? <Image src={it.img} alt="" width={13} height={13} className="object-contain" /> : it.icon}
+          </span>
+          {it.label}
+        </span>
+      ))}
+    </div>
+  );
 }
 
 function AskDemo() {
