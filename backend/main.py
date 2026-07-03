@@ -128,6 +128,16 @@ async def startup_event():
 
 
 
+@app.get("/")
+async def root():
+    return {
+        "service": "engram-cognee",
+        "status": "ok",
+        "docs": "/docs",
+        "health": "/health",
+    }
+
+
 @app.get("/health")
 async def health():
     return {"status": "ok", "service": "engram-cognee"}
