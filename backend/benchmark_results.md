@@ -12,6 +12,15 @@ pie showData
 - Cognee-served: **10/10 (100%)**
 - LLM fallback: **0/10 (0%)**
 
+### Measured recall latency
+
+| Metric | End-to-end (client) | Backend (server) |
+|---|---|---|
+| Average | 11670.4 ms | 11310.4 ms |
+| Median (p50) | 8437.2 ms | 7999.1 ms |
+| p95 | 26454.9 ms | 26147.0 ms |
+| Min / Max | 7825.7 / 40140.3 ms | - |
+
 | Query | Provider | Model |
 |---|---|---|
 | Who is the groom and when is the wedding? | cognee | graph-completion |

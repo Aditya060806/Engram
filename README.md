@@ -95,7 +95,8 @@ These are verifiable metrics drawn straight from the codebase, not marketing cla
 | Cognee integration paths | **2** | Local SDK **and** hosted Cognee Cloud REST tenant ([cognee_cloud.py](https://github.com/Aditya060806/Engram/blob/main/backend/cognee_cloud.py)) |
 | End-to-end lifecycle test checks | **6 / 6 PASS** | [test_cognee_cloud.py](https://github.com/Aditya060806/Engram/blob/main/backend/test_cognee_cloud.py) |
 | Ingestion source types | **6** | pdf · github · article · youtube · conversation · text |
-| Backend API endpoints | **35** | [§12 API Reference](#12-api-reference) |
+| Backend API endpoints | **36** | [§12 API Reference](#12-api-reference) |
+| Measured warm recall latency (p50) | **~8 s** | Cognee graph-completion, live tenant ([§14.1](#141-performance--latency)) |
 | MCP tools exposed to agents | **6** | read + write: recall · graph · review · remember · improve · forget ([mcp_server.py](https://github.com/Aditya060806/Engram/blob/main/backend/mcp_server.py)) |
 | Frontend UI routes | **9** | landing · ask · graph · resolve · ingest · recap · provenance · settings · login |
 | Reusable React components | **17** | [`frontend/src/components/`](https://github.com/Aditya060806/Engram/tree/main/frontend/src/components) |
@@ -746,6 +747,7 @@ All backend routes require the shared `X-Engram-Key` header (injected by the Ver
 |---|---|---|---|
 | `GET` | `/` | Service metadata + live Cognee routing status | — |
 | `GET` | `/health` | Liveness probe | — |
+| `GET` | `/metrics` | Per-endpoint response-time stats (avg / p50 / p95) | — |
 | `POST` | `/ingest` | Ingest a source (pdf, github, article, youtube, conversation, text) | 10/min |
 | `GET` | `/ingest/{job_id}` | Poll an ingestion job | — |
 | `POST` | `/import/chat-url` | Import a public ChatGPT/Claude/Gemini share link | — |
@@ -862,6 +864,25 @@ Engram is engineered so the parts under our control add as little latency as pos
 - **Targeted invalidation.** A write only clears the cache keys it actually affects (see the invalidation map in `api-cache.ts`), so unrelated views stay warm.
 
 > These changes remove avoidable overhead (repeated handshakes, redundant round trips, layout jank). They do not, and cannot, remove the real server-side time Cognee spends on graph completion and `cognify`, which is inherent to building and querying a knowledge graph.
+
+### Measured latency (live tenant)
+
+Every response carries an `X-Response-Time-Ms` header, and `GET /metrics` returns rolling per-endpoint stats. Measured on the live Render + Cognee Cloud deploy (2026-07-03), the numbers split cleanly by workload:
+
+| Path | Typical latency | What dominates |
+|---|---|---|
+| Cached reads / light endpoints (`/metrics`, `/health`, warm `/sources`, `/graph-status`) | **sub-millisecond to low-ms** (for example `/metrics` at ~0.7 ms) | served from memory, no external call |
+| Graph-grounded recall, warm (`/recall`, median) | **~8 s** (p50 backend ~8.0 s) | Cognee `GRAPH_COMPLETION`: graph traversal + LLM answer synthesis |
+| First recall after idle (cold start) | **up to ~40 s** (the p95/max outlier) | Render free-tier spin-up + first cold graph-completion |
+
+**Honest reading of these numbers:**
+
+- The **~8 s recall time is inherent**, not overhead. A grounded answer runs a graph traversal plus an LLM completion over the retrieved context. That is the cost of a correct, sourced answer instead of a blind guess, and no amount of connection pooling changes it.
+- End-to-end (client) and backend times differ by only ~300 ms, which confirms the **network/transport overhead is already small** and the pooling work paid off; the time is spent in Cognee, not in handshakes or transport.
+- The **cold-start outlier** is a Render free-tier characteristic (the service sleeps when idle). A paid instance or a keep-warm ping removes it; it is not an application cost.
+- Where latency is actually under our control, **navigation and cached reads, it is effectively instant** (single-digit milliseconds).
+
+> Reproduce: `python backend/benchmark_recall.py --url <backend-url> --no-ingest` prints avg/p50/p95 for both client and backend timing and writes the table to `backend/benchmark_results.md`.
 
 ---
 
