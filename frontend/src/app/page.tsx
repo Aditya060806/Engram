@@ -774,36 +774,78 @@ function ReconciliationDemo() {
   );
 }
 
+type OrbitPill = { label: string; img?: string; ic?: React.ReactNode; x: number; y: number; d: string };
 function SourceOrbit() {
-  const pills = [
-    { label: "ChatGPT Export", img: "/images/chat-gpt-icon.png", at: "top-[3%] left-[3%]", d: "0s" },
-    { label: "Claude Session", img: "/images/claude-icon.png", at: "top-[7%] right-[3%]", d: "0.6s" },
-    { label: "GitHub Commit", ic: Ic.github, at: "top-1/2 -translate-y-1/2 left-[1%]", d: "1.2s" },
-    { label: "specs.pdf", ic: Ic.pdf, at: "top-1/2 -translate-y-1/2 right-[1%]", d: "0.9s" },
-    { label: "Notion Notes", ic: Ic.notion, at: "bottom-[6%] left-[5%]", d: "0.3s" },
-    { label: "YouTube Audio", ic: Ic.youtube, at: "bottom-[1%] left-1/2 -translate-x-1/2", d: "1.5s" },
-    { label: "Web Article", ic: Ic.web, at: "bottom-[8%] right-[5%]", d: "0.45s" },
+  const [hovered, setHovered] = useState<number | null>(null);
+  const pills: OrbitPill[] = [
+    { label: "ChatGPT Export", img: "/images/chat-gpt-icon.png", x: 18, y: 15, d: "0s" },
+    { label: "Claude Session", img: "/images/claude-icon.png", x: 82, y: 17, d: "0.6s" },
+    { label: "GitHub Commit", ic: Ic.github, x: 11, y: 49, d: "1.2s" },
+    { label: "specs.pdf", ic: Ic.pdf, x: 89, y: 49, d: "0.9s" },
+    { label: "Notion Notes", ic: Ic.notion, x: 20, y: 85, d: "0.3s" },
+    { label: "YouTube Audio", ic: Ic.youtube, x: 50, y: 93, d: "1.5s" },
+    { label: "Web Article", ic: Ic.web, x: 80, y: 85, d: "0.45s" },
   ];
   return (
-    <div className="rounded-3xl border border-hairline bg-surface-card p-4 sm:p-6">
-      <div className="relative mx-auto w-full max-w-3xl h-[360px] sm:h-[460px]">
+    <div className="rounded-3xl border border-hairline bg-surface-card p-4 sm:p-6 overflow-hidden">
+      <div className="relative mx-auto w-full max-w-3xl h-[380px] sm:h-[480px]">
+        {/* animated connector lines + traveling data particles */}
+        <svg className="absolute inset-0 w-full h-full pointer-events-none hidden sm:block" aria-hidden>
+          {pills.map((p, i) => (
+            <g key={p.label}>
+              <line
+                x1={`${p.x}%`} y1={`${p.y}%`} x2="50%" y2="50%"
+                className="flow-line" strokeLinecap="round"
+                stroke={hovered === i ? "var(--color-ink)" : "var(--color-hairline-strong)"}
+                strokeWidth={hovered === i ? 1.6 : 1}
+                opacity={hovered === null || hovered === i ? 1 : 0.3}
+                style={{ transition: "opacity 0.3s, stroke 0.3s" }}
+              />
+              <circle r={hovered === i ? 3.5 : 2.4} fill="var(--color-ink)">
+                <animate attributeName="cx" from={`${p.x}%`} to="50%" dur="2.6s" begin={`${i * 0.34}s`} repeatCount="indefinite" />
+                <animate attributeName="cy" from={`${p.y}%`} to="50%" dur="2.6s" begin={`${i * 0.34}s`} repeatCount="indefinite" />
+                <animate attributeName="opacity" values="0;0.75;0" dur="2.6s" begin={`${i * 0.34}s`} repeatCount="indefinite" />
+              </circle>
+            </g>
+          ))}
+        </svg>
+
         {/* floating source pills (desktop) */}
-        {pills.map((p) => (
-          <div key={p.label} className={`hidden sm:flex source-float absolute ${p.at} items-center gap-2 px-3.5 py-2 rounded-full border border-hairline bg-surface-card shadow-[0_6px_20px_-8px_rgba(0,0,0,0.15)]`} style={{ animationDelay: p.d }}>
-            {p.img ? <Image src={p.img} alt="" width={16} height={16} className="object-contain" /> : <span className="text-body">{p.ic}</span>}
-            <span className="text-[12.5px] font-medium text-body whitespace-nowrap">{p.label}</span>
+        {pills.map((p, i) => (
+          <div
+            key={p.label}
+            className="hidden sm:block absolute z-10"
+            style={{ left: `${p.x}%`, top: `${p.y}%`, transform: "translate(-50%,-50%)" }}
+            onMouseEnter={() => setHovered(i)}
+            onMouseLeave={() => setHovered(null)}
+          >
+            <div className="source-float" style={{ animationDelay: p.d }}>
+              <div
+                className="flex items-center gap-2 px-3.5 py-2 rounded-full border bg-surface-card cursor-default transition-all duration-200"
+                style={{
+                  borderColor: hovered === i ? "var(--color-ink)" : "var(--color-hairline)",
+                  boxShadow: hovered === i ? "0 12px 32px -10px rgba(0,0,0,0.32)" : "0 6px 20px -8px rgba(0,0,0,0.15)",
+                  transform: hovered === i ? "scale(1.06)" : "scale(1)",
+                }}
+              >
+                {p.img ? <Image src={p.img} alt="" width={16} height={16} className="object-contain" /> : <span className="text-body">{p.ic}</span>}
+                <span className="text-[12.5px] font-medium text-body whitespace-nowrap">{p.label}</span>
+              </div>
+            </div>
           </div>
         ))}
+
         {/* center cluster */}
-        <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
+        <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-20">
           <div className="relative w-40 h-40 sm:w-52 sm:h-52">
-            <div className="absolute inset-0 rounded-full border border-dashed border-hairline-strong/70" />
-            <div className="absolute inset-[18%] rounded-full border border-dashed border-hairline/60" />
+            <div className="absolute inset-0 rounded-full border border-dashed border-hairline-strong/60 ring-spin" />
+            <div className="absolute inset-[16%] rounded-full border border-dashed border-hairline/70 ring-spin-rev" />
+            <div className="absolute inset-[26%] rounded-full blur-2xl core-glow" style={{ background: "color-mix(in srgb, var(--color-gradient-lavender) 34%, transparent)" }} />
             <Provider className="left-1/2 -translate-x-1/2 -top-4" src="/images/gemini-icon.png" label="Gemini" />
             <Provider className="-left-3 bottom-4" src="/images/chat-gpt-icon.png" label="ChatGPT" />
             <Provider className="-right-3 bottom-4" src="/images/claude-icon.png" label="Claude" />
             <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex flex-col items-center">
-              <div className="w-[72px] h-[72px] sm:w-20 sm:h-20 rounded-full bg-surface-card border border-hairline shadow-[0_8px_30px_-8px_rgba(0,0,0,0.2)] flex items-center justify-center cognee-breathe">
+              <div className={`w-[72px] h-[72px] sm:w-20 sm:h-20 rounded-full bg-surface-card border shadow-[0_8px_30px_-8px_rgba(0,0,0,0.2)] flex items-center justify-center cognee-breathe transition-all duration-300 ${hovered !== null ? "border-ink scale-105" : "border-hairline"}`}>
                 <Image src="/images/congee-icon.png" alt="Cognee" width={34} height={34} className="object-contain" />
               </div>
               <span className="mt-1.5 text-[12px] font-semibold">Cognee</span>

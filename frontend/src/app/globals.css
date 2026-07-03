@@ -701,3 +701,24 @@ html.theme-transition *::after {
   height: 1px;
   background: linear-gradient(90deg, transparent, var(--color-hairline-strong), transparent);
 }
+
+/* ── Source orbit: rotating rings, flowing connectors, glowing core ── */
+.ring-spin { animation: ring-spin 34s linear infinite; transform-origin: center; }
+.ring-spin-rev { animation: ring-spin 26s linear infinite reverse; transform-origin: center; }
+@keyframes ring-spin { to { transform: rotate(360deg); } }
+
+.flow-line {
+  stroke-dasharray: 3 7;
+  animation: flow-in 1.4s linear infinite;
+}
+@keyframes flow-in { to { stroke-dashoffset: -20; } }
+
+.core-glow { animation: core-glow 3.6s ease-in-out infinite; }
+@keyframes core-glow {
+  0%, 100% { opacity: 0.3; transform: scale(1); }
+  50%      { opacity: 0.55; transform: scale(1.14); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ring-spin, .ring-spin-rev, .flow-line, .core-glow { animation: none; }
+}
