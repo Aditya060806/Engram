@@ -641,6 +641,44 @@ Engram is not just a dashboard, it is a memory **backend any agent can use acros
 
 `engram_remember` polls the ingest job to completion, so an agent gets a definitive result before continuing. This is what turns "never-forget workflows" from a claim into a working integration: an agent loop can learn into Engram today and act smarter tomorrow.
 
+**Register Engram in an MCP client.** The server speaks MCP over stdio, so any MCP-capable client (Claude Desktop, Cursor, Kiro, custom agents) can mount it. Add this to your client's MCP config (for example `mcp.json`), pointing at the backend virtual-env Python so dependencies resolve:
+
+```json
+{
+  "mcpServers": {
+    "engram": {
+      "command": "python",
+      "args": ["mcp_server.py"],
+      "cwd": "/absolute/path/to/Engram/backend",
+      "env": {
+        "ENGRAM_MCP_USER_ID": "mcp_agent"
+      },
+      "disabled": false,
+      "autoApprove": ["engram_recall", "engram_review", "engram_graph_snapshot"]
+    }
+  }
+}
+```
+
+- Use the venv interpreter if your client does not activate it, for example `command: "/absolute/path/to/Engram/backend/venv/bin/python"` (macOS/Linux) or `backend\\venv\\Scripts\\python.exe` (Windows).
+- The server loads LLM and Cognee credentials from `backend/.env`, the same as the API. With `COGNEE_API_KEY` + `COGNEE_SERVICE_URL` set, the agent's memory lands on your Cognee Cloud tenant; without them it uses the self-hosted SDK.
+- `ENGRAM_MCP_USER_ID` scopes the agent's memory so it persists across sessions. Give different agents different ids to isolate their memories.
+- Read-only tools are safe to auto-approve; the write tools (`engram_remember`, `engram_improve`, `engram_forget`) are left for explicit approval.
+
+**Example agent loop across two runs:**
+
+```text
+# Monday
+engram_remember(text="Customer Acme is on the Enterprise plan; renewal is in March.")
+  -> Remembered 'Customer Acme is on...'. Structured into the graph and reconciled.
+
+# Friday, a fresh session with no chat history
+engram_recall(query="What plan is Acme on and when do they renew?")
+  -> Answer: Acme is on the Enterprise plan, renewing in March. (source: cognee / graph-completion)
+```
+
+No context window, no re-priming: the fact was written into the graph on Monday and recalled from it on Friday.
+
 ### 10.7 Hackathon use cases this maps to
 The same lifecycle covers several of the suggested example categories:
 
@@ -1028,7 +1066,7 @@ BYOK keys are encrypted at rest with `Fernet` and never returned to the browser 
 The graph had no grounded answer at query time (commonly an empty graph right after deploy). Ingest content first; once the graph has nodes, recall is served by Cognee.
 
 **Can other agents use this memory?**
-Yes. [`backend/mcp_server.py`](https://github.com/Aditya060806/Engram/blob/main/backend/mcp_server.py) exposes Engram's memory operations over MCP.
+Yes, both to read and to write. [`backend/mcp_server.py`](https://github.com/Aditya060806/Engram/blob/main/backend/mcp_server.py) exposes six MCP tools (`remember`, `recall`, `improve`, `forget`, `review`, `graph_snapshot`) over stdio. Any MCP client can register it (see [10.6 Agent Memory over MCP](#106-agent-memory-over-mcp-read--write) for the `mcp.json` snippet), and an agent's memory persists across runs via `ENGRAM_MCP_USER_ID`.
 
 ---
 
