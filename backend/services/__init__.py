@@ -2565,3 +2565,24 @@ async def get_cognee_graph_status() -> dict:
         "ready": node_count > 0,
         "building": node_count == 0 and has_sources,
     }
+
+
+async def get_review_candidates(limit: int = 10) -> list[dict]:
+    """Surface the facts most in need of review, lowest confidence first.
+
+    Confidence doubles as a mastery/freshness signal: low-confidence and
+    decaying nodes are the ones a learner should revisit or a workflow should
+    re-confirm. This is read-only and reuses the cached graph snapshot, so it
+    adds no new load-bearing logic."""
+    snap = await get_graph_snapshot()
+    ranked = sorted(snap.nodes, key=lambda n: (n.status != "decaying", n.confidenceScore))
+    out: list[dict] = []
+    for n in ranked[: max(1, min(limit, 50))]:
+        out.append({
+            "label": n.label,
+            "summary": n.summary,
+            "confidence": round(n.confidenceScore, 3),
+            "status": n.status,
+            "sourceProvenance": n.sourceProvenance,
+        })
+    return out

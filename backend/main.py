@@ -54,6 +54,7 @@ from services import (
     connect_cognee_cloud,
     cognee_status,
     get_cognee_graph_status,
+    get_review_candidates,
     run_memory_improve,
 )
 
@@ -278,6 +279,11 @@ async def reset_demo_endpoint(_auth=Depends(verify_llm_authorization)):
 @app.get("/cognee/graph-status")
 async def cognee_graph_status(_auth=Depends(verify_llm_authorization)):
     return await get_cognee_graph_status()
+
+
+@app.get("/review")
+async def review_candidates(limit: int = 10, _auth=Depends(verify_llm_authorization)):
+    return await get_review_candidates(limit)
 
 
 @app.get("/cognee/activity")

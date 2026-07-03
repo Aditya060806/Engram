@@ -94,7 +94,8 @@ These are verifiable metrics drawn straight from the codebase, not marketing cla
 | Cognee integration paths | **2** | Local SDK **and** hosted Cognee Cloud REST tenant ([cognee_cloud.py](https://github.com/Aditya060806/Engram/blob/main/backend/cognee_cloud.py)) |
 | End-to-end lifecycle test checks | **6 / 6 PASS** | [test_cognee_cloud.py](https://github.com/Aditya060806/Engram/blob/main/backend/test_cognee_cloud.py) |
 | Ingestion source types | **6** | pdf · github · article · youtube · conversation · text |
-| Backend API endpoints | **34** | [§12 API Reference](#12-api-reference) |
+| Backend API endpoints | **35** | [§12 API Reference](#12-api-reference) |
+| MCP tools exposed to agents | **6** | read + write: recall · graph · review · remember · improve · forget ([mcp_server.py](https://github.com/Aditya060806/Engram/blob/main/backend/mcp_server.py)) |
 | Frontend UI routes | **9** | landing · ask · graph · resolve · ingest · recap · provenance · settings · login |
 | Reusable React components | **17** | [`frontend/src/components/`](https://github.com/Aditya060806/Engram/tree/main/frontend/src/components) |
 | Lines of code | **~11.6k** | ~4.2k Python (backend) + ~7.5k TypeScript (frontend) |
@@ -626,6 +627,32 @@ Self-hosting users can connect their own accounts/keys for Groq, OpenAI, or Gemi
 ### 10.5 The Recap — "Where's My Context?"
 A direct answer to the hackathon's premise. The `/recap` view is a *morning-after digest* of your memory: **"Here's what happened while you were out."** For a chosen window (7/30/90 days) it stitches together every Cognee lifecycle operation into one narrative — sources **remembered**, decisions and reinforcements from **improve/cognify**, contradictions **reconciled**, and stale nodes **forgotten** — then uses `recall()` plus the LLM to write a punchy, grounded summary. Animated count-up stats and a reveal-on-scroll event timeline make the invisible work of a self-maintaining memory legible at a glance.
 
+### 10.6 Agent Memory over MCP (read + write)
+Engram is not just a dashboard, it is a memory **backend any agent can use across runs**. The MCP server ([`mcp_server.py`](https://github.com/Aditya060806/Engram/blob/main/backend/mcp_server.py)) exposes the full lifecycle as six tools, scoped to a stable agent identity (`ENGRAM_MCP_USER_ID`) so memory persists between sessions:
+
+| MCP tool | Type | Wraps | Purpose |
+|---|---|---|---|
+| `engram_remember` | write | `ingest_source(text)` | Store a fact/decision; structured into the graph and reconciled |
+| `engram_recall` | read | `answer_query` | Graph-grounded answer with diff + timeline |
+| `engram_improve` | write | `run_memory_improve` | Enrich the graph (improve/memify) |
+| `engram_forget` | write | `forget_source` / `forget_node` | Prune a source or node |
+| `engram_review` | read | `get_review_candidates` | Lowest-confidence facts to revisit |
+| `engram_graph_snapshot` | read | `get_graph_snapshot` | Full nodes + edges |
+
+`engram_remember` polls the ingest job to completion, so an agent gets a definitive result before continuing. This is what turns "never-forget workflows" from a claim into a working integration: an agent loop can learn into Engram today and act smarter tomorrow.
+
+### 10.7 Hackathon use cases this maps to
+The same lifecycle covers several of the suggested example categories:
+
+| Example | How Engram fulfills it |
+|---|---|
+| **Research & Knowledge Copilots** | Ingest papers, repos, articles, and video into a living graph; recall via deep graph traversal, with 3D graph, schema inventory, and provenance. This is Engram's core. |
+| **Personal Memory Agents** | Cross-session session memory, decisions as first-class nodes, and reconciliation so changed preferences update instead of duplicating. |
+| **Self-Improving Agents** | `improve()`/`memify` plus session feedback (score + text) and confidence decay that reweights unused knowledge. |
+| **Never-Forget Workflows** | Read + write MCP tools let any agent/pipeline carry context between runs (see 10.6). |
+| **Support & Customer Memory** | Per-user isolated memory (`X-User-Id`): ingest a customer's past tickets as notes/conversations, then recall their full history. |
+| **Learning & Tutoring Tools** | The per-user graph is a personalized knowledge map; confidence doubles as a mastery signal, surfaced by `/review` and `engram_review`. |
+
 ---
 
 ## 11. The Math: Confidence, Decay, and Reconciliation
@@ -699,6 +726,7 @@ All backend routes require the shared `X-Engram-Key` header (injected by the Ver
 | `POST` | `/reset-demo` | Reset demo data | — |
 | `GET` | `/cognee/activity` | Live Cognee operation log | — |
 | `GET` | `/cognee/graph-status` | Graph build state (building / ready / node count) | — |
+| `GET` | `/review` | Facts most in need of review (lowest confidence first) | — |
 | `GET` | `/provenance` | Cognee provenance HTML (rendered in an iframe) | — |
 | `GET` | `/schema-inventory` | Entity-type inventory with samples | — |
 | `GET` | `/recap` | "Where's My Context?" digest (window in days) | 20/min |
