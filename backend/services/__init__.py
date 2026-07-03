@@ -598,6 +598,12 @@ async def run_ingest_background(job_id: str, source: Source, req: IngestRequest,
                     try:
                         truncated = content[:50000] if len(content) > 50000 else content
                         full = f"[Source: {req.label} | Type: {req.type} | Ingested: {datetime.now(timezone.utc).isoformat()}]\n\n{truncated}"
+                        # Make sure the tenant dataset exists before adding text, so
+                        # the subsequent cognify() has a valid target to build the graph on.
+                        try:
+                            await client.ensure_dataset(get_cognee_dataset())
+                        except Exception as ds_err:
+                            print(f"[Cognee Cloud] ensure_dataset warning ({ds_err})", flush=True)
                         await client.remember_text(full, get_cognee_dataset(), run_in_background=True)
                         log_cognee_activity("remember()", f"[Cloud] Ingested '{req.label}' → cognify started on tenant")
                         return
@@ -2477,6 +2483,17 @@ async def connect_cognee_cloud() -> bool:
     from cognee_cloud import get_cloud_client, cloud_enabled
 
     if not cloud_enabled():
+        missing = [
+            name for name in ("COGNEE_API_KEY", "COGNEE_SERVICE_URL")
+            if not os.environ.get(name)
+        ]
+        print(
+            "[Cognee] Cloud routing DISABLED — using the local embedded SDK "
+            f"(graph is empty on a fresh container). Missing env vars: {', '.join(missing)}. "
+            "Set them in your host's environment to route remember/recall/improve/forget "
+            "to the hosted tenant.",
+            flush=True,
+        )
         return False
 
     client = get_cloud_client()
@@ -2507,3 +2524,21 @@ def cognee_cloud_active() -> bool:
     # startup health check never permanently forces answers onto the fallback LLM.
     from cognee_cloud import cloud_enabled
     return cloud_enabled()
+
+
+def cognee_status() -> dict:
+    """Diagnostic snapshot of how memory is routed. Safe to expose (no secrets):
+    lets you confirm at a glance whether the hosted Cognee Cloud tenant is active
+    in production, or whether the app has silently fallen back to the local SDK."""
+    cloud = cognee_cloud_active()
+    missing = [
+        name for name in ("COGNEE_API_KEY", "COGNEE_SERVICE_URL")
+        if not os.environ.get(name)
+    ]
+    return {
+        "cloud_enabled": cloud,
+        "cloud_connected": COGNEE_CLOUD_CONNECTED,
+        "local_sdk_ready": COGNEE_READY,
+        "missing_cloud_env": missing,
+        "recall_source": "cognee-cloud" if cloud else ("local-sdk" if COGNEE_READY else "llm-fallback"),
+    }

@@ -52,6 +52,7 @@ from services import (
     import_chat_from_url,
     get_memory_recap,
     connect_cognee_cloud,
+    cognee_status,
     run_memory_improve,
 )
 
@@ -116,9 +117,12 @@ async def startup_event():
             await asyncio.to_thread(db_save_user_ai_config, "groq", groq_key, groq_model)
             print(f"[Startup] Auto-configured AI provider: groq ({groq_model})", flush=True)
 
+    # Report/verify hosted Cognee Cloud routing. This is independent of the local
+    # SDK: it must run even when COGNEE_READY is False, otherwise a missing cloud
+    # config is never surfaced in the logs.
+    await connect_cognee_cloud()
+
     if COGNEE_READY:
-        # Optionally route to a hosted Cognee Cloud instance (no-op unless configured)
-        await connect_cognee_cloud()
         try:
             print("[Cognee] Running startup migrations...", flush=True)
             await cognee.run_migrations()
@@ -135,6 +139,7 @@ async def root():
         "status": "ok",
         "docs": "/docs",
         "health": "/health",
+        "cognee": cognee_status(),
     }
 
 
