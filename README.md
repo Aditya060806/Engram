@@ -93,6 +93,7 @@ These are verifiable metrics drawn straight from the codebase, not marketing cla
 | Measured recall served by Cognee | **10 / 10 (100%)** | Live-tenant benchmark, [§ measured recall routing](#measured-recall-routing-live-tenant) |
 | Cognee lifecycle operations used | **4 / 4** | `remember` · `recall` · `improve` · `forget` — all load-bearing ([services/__init__.py](https://github.com/Aditya060806/Engram/blob/main/backend/services/__init__.py)) |
 | Cognee integration paths | **2** | Local SDK **and** hosted Cognee Cloud REST tenant ([cognee_cloud.py](https://github.com/Aditya060806/Engram/blob/main/backend/cognee_cloud.py)) |
+| Typed ontology extraction | **5 node types + typed edges** | `graph_model` + custom prompt steer `remember()` ([§8.2](#82-schema-guided-typed-extraction)) |
 | End-to-end lifecycle test checks | **6 / 6 PASS** | [test_cognee_cloud.py](https://github.com/Aditya060806/Engram/blob/main/backend/test_cognee_cloud.py) |
 | Ingestion source types | **6** | pdf · github · article · youtube · conversation · text |
 | Backend API endpoints | **36** | [§12 API Reference](#12-api-reference) |
@@ -510,6 +511,12 @@ Engram uses Cognee two ways, both load-bearing: the **local Python SDK** (embedd
 Core wiring lives in [`services/__init__.py`](https://github.com/Aditya060806/Engram/blob/main/backend/services/__init__.py) and the tenant REST client in [`cognee_cloud.py`](https://github.com/Aditya060806/Engram/blob/main/backend/cognee_cloud.py).
 
 > **Cognee-first by design.** Recall prefers the Cognee `GRAPH_COMPLETION` path and only falls back to an LLM provider when the graph has no grounded answer (for example, an empty graph on a fresh deploy). Answers surface their origin as `provider=cognee model=graph-completion` when served from the graph.
+
+### 8.2 Schema-guided (typed) extraction
+
+Ingestion does not settle for generic chunks. Engram hands Cognee Cloud `remember()` a **typed ontology** (`graph_model`, a JSON Schema) plus a **custom extraction prompt** ([graph_model.py](https://github.com/Aditya060806/Engram/blob/main/backend/graph_model.py)), so the graph is built from Engram's own domain types, `Source`, `Topic`, `Entity`, `Fact`, and `Decision`, with typed edges including `supersedes` and `contradicts`. Those two edges are the backbone of the reconciliation and decay story: they let the graph itself express "this replaced that" rather than leaving it implicit.
+
+This is verified live: ingesting a supersession scenario ("chose Postgres, then switched to Supabase, which supersedes the earlier decision") into a throwaway tenant dataset produced typed `Decision`, `Topic`, and `Entity` nodes, not opaque chunks. If a tenant ever rejects the graph model, ingestion transparently falls back to the proven `add_text` plus `cognify` path, so extraction is strictly an upgrade with no regression risk.
 
 ### 8.1 Verifying the lifecycle end-to-end
 
