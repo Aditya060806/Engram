@@ -179,6 +179,14 @@ def _ensure_user_id_column(conn, table: str):
 
 def db_init():
     conn = get_db_connection()
+    # On PostgreSQL a failing DDL statement (for example an ALTER TABLE that adds
+    # a column which already exists) aborts the whole transaction, and every
+    # subsequent statement then fails with InFailedSqlTransaction. SQLite does not
+    # poison transactions the same way, which is why this only surfaces in
+    # production. Enabling autocommit isolates each statement so a benign,
+    # already-applied migration cannot break the rest of initialization.
+    if conn.is_postgres:
+        conn.conn.autocommit = True
     cursor = conn.cursor()
     
     # 1. Sources table
