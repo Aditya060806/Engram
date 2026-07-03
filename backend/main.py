@@ -53,6 +53,7 @@ from services import (
     get_memory_recap,
     connect_cognee_cloud,
     cognee_status,
+    get_cognee_graph_status,
     run_memory_improve,
 )
 
@@ -272,6 +273,11 @@ async def forget_source_endpoint(req: ForgetSourceRequest, _auth=Depends(verify_
 async def reset_demo_endpoint(_auth=Depends(verify_llm_authorization)):
     await reset_demo_data()
     return {"status": "ok"}
+
+
+@app.get("/cognee/graph-status")
+async def cognee_graph_status(_auth=Depends(verify_llm_authorization)):
+    return await get_cognee_graph_status()
 
 
 @app.get("/cognee/activity")

@@ -2,6 +2,7 @@
 
 import { useState, useRef } from "react";
 import IngestionStepper from "@/components/IngestionStepper";
+import GraphBuildStatus from "@/components/GraphBuildStatus";
 import ChatImportModal from "@/components/ChatImportModal";
 import { ingestSource } from "@/lib/api";
 import type { SourceType } from "@/lib/types";
@@ -343,6 +344,8 @@ export default function IngestPage() {
             <IngestionStepper currentStep={currentStep} progress={progress} status={jobStatus} />
           </div>
         )}
+
+        {jobStatus === "completed" && <GraphBuildStatus />}
       </div>
 
       <ChatImportModal open={showImportModal} onClose={() => setShowImportModal(false)} />

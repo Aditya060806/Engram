@@ -2542,3 +2542,26 @@ def cognee_status() -> dict:
         "missing_cloud_env": missing,
         "recall_source": "cognee-cloud" if cloud else ("local-sdk" if COGNEE_READY else "llm-fallback"),
     }
+
+
+async def get_cognee_graph_status() -> dict:
+    """Report whether the knowledge graph has finished building for the current
+    user's dataset. Cloud ingest runs cognify in the background, so right after
+    an ingest the graph can still be empty for a short window. The UI polls this
+    to show a 'building' state instead of looking permanently empty."""
+    dataset = get_cognee_dataset()
+    backend = "cloud" if cognee_cloud_active() else ("local" if COGNEE_READY else "none")
+    node_count = 0
+    try:
+        snap = await get_graph_snapshot()
+        node_count = len(snap.nodes)
+    except Exception as e:
+        print(f"[Cognee] graph status failed ({e})", flush=True)
+    has_sources = bool(db_get_sources())
+    return {
+        "backend": backend,
+        "dataset": dataset,
+        "nodeCount": node_count,
+        "ready": node_count > 0,
+        "building": node_count == 0 and has_sources,
+    }

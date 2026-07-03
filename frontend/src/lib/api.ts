@@ -199,6 +199,18 @@ export async function getCogneeActivity(): Promise<CogneeActivityLog[]> {
   return fetchAPI("/cognee/activity");
 }
 
+export interface CogneeGraphStatus {
+  backend: string;
+  dataset: string;
+  nodeCount: number;
+  ready: boolean;
+  building: boolean;
+}
+
+export async function getCogneeGraphStatus(): Promise<CogneeGraphStatus> {
+  return fetchAPI("/cognee/graph-status");
+}
+
 export interface AIConfig {
   configured: boolean;
   provider?: string;
