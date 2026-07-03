@@ -248,9 +248,9 @@ export default function IngestPage() {
                   if (!isDisabled) setPdfFiles(Array.from(e.dataTransfer.files).filter((f) => f.type === "application/pdf"));
                 }}
               >
-                <svg width="36" height="36" viewBox="0 0 32 32" fill="none" className="mx-auto mb-4 opacity-60">
-                  <path d="M16 4v16m0 0l4-4m-4 4l-4-4" stroke="#292524" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-                  <path d="M4 20v6a2 2 0 002 2h20a2 2 0 002-2v-6" stroke="#292524" strokeWidth="1.5" strokeLinecap="round" />
+                <svg width="36" height="36" viewBox="0 0 32 32" fill="none" className="mx-auto mb-4 opacity-60 text-body">
+                  <path d="M16 4v16m0 0l4-4m-4 4l-4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                  <path d="M4 20v6a2 2 0 002 2h20a2 2 0 002-2v-6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
                 </svg>
                 <p className="text-sm font-medium text-body">
                   {pdfFiles.length > 0

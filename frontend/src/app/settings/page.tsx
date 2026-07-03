@@ -508,9 +508,9 @@ export default function SettingsPage() {
             {sources.map((source) => (
               <div key={source.id} className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-4 sm:px-6 py-4 hover:bg-canvas/20 transition-colors">
                 <div className="flex items-start sm:items-center gap-3">
-                  <svg width="16" height="16" viewBox="0 0 14 14" fill="none" className="shrink-0 mt-0.5 sm:mt-0">
-                    <circle cx="7" cy="7" r="6" stroke="#777169" strokeWidth="1.2" />
-                    <path d="M4 7h6" stroke="#777169" strokeWidth="1.2" strokeLinecap="round" />
+                  <svg width="16" height="16" viewBox="0 0 14 14" fill="none" className="shrink-0 mt-0.5 sm:mt-0 text-muted">
+                    <circle cx="7" cy="7" r="6" stroke="currentColor" strokeWidth="1.2" />
+                    <path d="M4 7h6" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
                   </svg>
                   <div className="min-w-0 flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2.5">
                     <span className="text-[14px] font-semibold text-ink truncate">{source.label}</span>{" "}

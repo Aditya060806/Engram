@@ -231,7 +231,7 @@ function GraphLoadingSkeleton() {
 export default function GraphPage() {
   const router = useRouter();
   const { config, loading: loadingAI, openModal } = useAIConfig();
-  useTheme();
+  const { resolvedTheme } = useTheme();
   const [nodes, setNodes] = useState<GraphNode[]>([]);
   const [edges, setEdges] = useState<GraphEdge[]>([]);
   const [selectedNode, setSelectedNode] = useState<NodeDetail | null>(null);
@@ -733,6 +733,7 @@ export default function GraphPage() {
             {dimensions.width > 0 && dimensions.height > 0 && (
               use2d ? (
                 <ForceGraph2D
+                  key={`fg2d-${resolvedTheme}`}
                   ref={fg2dRef}
                   width={dimensions.width}
                   height={dimensions.height}
@@ -774,6 +775,7 @@ export default function GraphPage() {
                 />
               ) : (
                 <ForceGraph3D
+                  key={`fg3d-${resolvedTheme}`}
                   ref={fg3dRef}
                   width={dimensions.width}
                   height={dimensions.height}

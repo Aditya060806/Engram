@@ -6,7 +6,7 @@ const colorMap: Record<ConfidenceLevel, string> = {
   fresh: "bg-confidence-fresh",
   fading: "bg-confidence-fading",
   stale: "bg-confidence-stale",
-  forgotten: "bg-hairline-tertiary",
+  forgotten: "bg-hairline-strong",
 };
 
 const labelMap: Record<ConfidenceLevel, string> = {
@@ -24,14 +24,14 @@ interface ConfidenceBadgeProps {
 
 export default function ConfidenceBadge({ level, score, showLabel = true }: ConfidenceBadgeProps) {
   return (
-    <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-pill bg-surface-2">
+    <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-surface-strong border border-hairline">
       <span className={`w-1.5 h-1.5 rounded-full ${colorMap[level]}`} />
       {showLabel && (
-        <span className="text-caption text-ink-subtle">
+        <span className="text-[11px] text-muted">
           {labelMap[level]}
         </span>
       )}
-      <span className="text-caption text-ink-tertiary font-mono">{Math.round(score * 100)}%</span>
+      <span className="text-[11px] text-muted-soft font-mono">{Math.round(score * 100)}%</span>
     </span>
   );
 }
