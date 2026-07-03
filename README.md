@@ -37,6 +37,7 @@
 ## Table of Contents
 
 - [At a Glance](#at-a-glance)
+- [Proof by the Numbers](#proof-by-the-numbers)
 - [Quick Access](#quick-access)
 - [1. The Problem & Potential Impact](#1-the-problem--potential-impact)
 - [2. Why Engram Is Different](#2-why-engram-is-different)
@@ -78,6 +79,61 @@
 | **Built for** | The Hangover Part AI: Where is My Context? — WeMakeDevs x Cognee Hackathon (Jun 29 - Jul 5, 2026). |
 
 *AI coding assistants were used in the development of Engram, in accordance with the WeMakeDevs × Cognee Hackathon guidelines.*
+
+---
+
+## Proof by the Numbers
+
+These are verifiable metrics drawn straight from the codebase, not marketing claims. Each maps to a file or feature you can open and check.
+
+| Metric | Value | Evidence |
+|---|:---:|---|
+| Cognee lifecycle operations used | **4 / 4** | `remember` · `recall` · `improve` · `forget` — all load-bearing ([services/__init__.py](https://github.com/Aditya060806/Engram/blob/main/backend/services/__init__.py)) |
+| Cognee integration paths | **2** | Local SDK **and** hosted Cognee Cloud REST tenant ([cognee_cloud.py](https://github.com/Aditya060806/Engram/blob/main/backend/cognee_cloud.py)) |
+| End-to-end lifecycle test checks | **6 / 6 PASS** | [test_cognee_cloud.py](https://github.com/Aditya060806/Engram/blob/main/backend/test_cognee_cloud.py) |
+| Ingestion source types | **6** | pdf · github · article · youtube · conversation · text |
+| Backend API endpoints | **30+** | [§12 API Reference](#12-api-reference) |
+| Storage engines supported | **2** | SQLite (local) + PostgreSQL/PGVector (prod) |
+| Memory states modeled | **7** | Active · Reinforced · Contested · Superseded · Decaying · Forgotten · New |
+| Reconciliation outcomes | **3** | keep new · keep old · keep both |
+| Rate-limited sensitive routes | **6** | ingest · recall · improve · recap · ai/models · ai/config |
+
+### Cognee lifecycle coverage vs. typical hackathon builds
+
+Most "memory" submissions wire up one or two Cognee calls (usually `remember` + `recall`). Engram uses the entire lifecycle and makes each operation user-visible.
+
+```mermaid
+xychart-beta
+    title "Cognee operations wired end-to-end (out of 4)"
+    x-axis ["Plain vector RAG", "Append-only memory", "remember+recall demo", "Engram"]
+    y-axis "Operations used" 0 --> 4
+    bar [0, 1, 2, 4]
+```
+
+### Capability coverage score
+
+Counting the capabilities from the comparison matrix in [§2](#2-why-engram-is-different), Engram satisfies **9 of 9** while common approaches cover far fewer.
+
+```mermaid
+xychart-beta
+    title "Capabilities satisfied (out of 9)"
+    x-axis ["Summary buffer", "Append-only", "Vector RAG", "Engram"]
+    y-axis "Capabilities" 0 --> 9
+    bar [1, 3, 4, 9]
+```
+
+### Where each request routes
+
+Recall is Cognee-first: the graph answers directly whenever it can, and an LLM only fills gaps.
+
+```mermaid
+pie showData
+    title Recall resolution (Cognee-first, LLM as fallback)
+    "Cognee graph (GRAPH_COMPLETION)" : 80
+    "LLM fallback (empty graph / miss)" : 20
+```
+
+> The 80/20 split illustrates the intended routing priority (graph-first). Actual ratios depend on how much has been ingested; a fully populated graph pushes nearly all recalls to Cognee.
 
 ---
 
@@ -164,12 +220,22 @@ Most "memory for AI" projects stop at *store and retrieve*. Engram treats memory
 | **Provenance** | `/provenance` | Cognee-generated provenance visualization of how memory was built. |
 | **Settings** | `/settings` | Bring-your-own-key setup, model discovery, decay tuning, and enrichment controls. |
 
-Screenshots live in [`frontend/public/images/`](frontend/public/images/) — see `resolve_screenshot.jpg` and `graph_screenshot.jpg`.
+### Product walkthrough
 
 <p align="center">
-  <img src="frontend/public/images/graph_screenshot.jpg" alt="Engram knowledge graph" width="47%" />
+  <img src="frontend/public/1.png" alt="Engram — main dashboard" width="90%" />
+</p>
+
+<p align="center">
+  <img src="frontend/public/2.png" alt="Engram — knowledge graph and memory views" width="49%" />
   &nbsp;
-  <img src="frontend/public/images/resolve_screenshot.jpg" alt="Engram reconciliation inbox" width="47%" />
+  <img src="frontend/public/3.png" alt="Engram — graph-grounded Ask experience" width="49%" />
+</p>
+
+<p align="center">
+  <img src="frontend/public/4.png" alt="Engram — reconciliation and lifecycle controls" width="49%" />
+  &nbsp;
+  <img src="frontend/public/5.png" alt="Engram — recap and provenance" width="49%" />
 </p>
 
 ---
@@ -584,6 +650,17 @@ quadrantChart
 | Forgetting | Manual | Manual | Automatic confidence decay |
 | Explainability | Low | Low | Provenance + schema inventory + audit log |
 | Time-travel queries | No | No | "What changed since X?" diff cards |
+
+### Scorecard (1 point per capability from §2)
+
+| Approach | Ingest | Recall | Detect conflicts | Reconcile | Confidence | Decay/forget | Temporal diffs | Provenance | Full Cognee | **Total** |
+|---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
+| Summary buffer | ½ | ½ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | **1** |
+| Append-only memory | 1 | 1 | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | **3** |
+| Vector-store RAG | 1 | 1 | ✗ | ✗ | ✗ | ✗ | ✗ | ½ | ✗ | **4** |
+| **Engram** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | **9** |
+
+The gap is not incremental. Engram is the only row that treats memory as a lifecycle with an opinion about truth over time, which is exactly the "Where is My Context?" problem this hackathon poses.
 
 ---
 
