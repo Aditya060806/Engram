@@ -93,11 +93,15 @@ These are verifiable metrics drawn straight from the codebase, not marketing cla
 | Cognee integration paths | **2** | Local SDK **and** hosted Cognee Cloud REST tenant ([cognee_cloud.py](https://github.com/Aditya060806/Engram/blob/main/backend/cognee_cloud.py)) |
 | End-to-end lifecycle test checks | **6 / 6 PASS** | [test_cognee_cloud.py](https://github.com/Aditya060806/Engram/blob/main/backend/test_cognee_cloud.py) |
 | Ingestion source types | **6** | pdf · github · article · youtube · conversation · text |
-| Backend API endpoints | **30+** | [§12 API Reference](#12-api-reference) |
+| Backend API endpoints | **34** | [§12 API Reference](#12-api-reference) |
+| Frontend UI routes | **9** | landing · ask · graph · resolve · ingest · recap · provenance · settings · login |
+| Reusable React components | **17** | [`frontend/src/components/`](https://github.com/Aditya060806/Engram/tree/main/frontend/src/components) |
+| Lines of code | **~11.6k** | ~4.2k Python (backend) + ~7.5k TypeScript (frontend) |
 | Storage engines supported | **2** | SQLite (local) + PostgreSQL/PGVector (prod) |
 | Memory states modeled | **7** | Active · Reinforced · Contested · Superseded · Decaying · Forgotten · New |
 | Reconciliation outcomes | **3** | keep new · keep old · keep both |
 | Rate-limited sensitive routes | **6** | ingest · recall · improve · recap · ai/models · ai/config |
+| Architecture diagrams in this README | **15** | rendered Mermaid (flowchart, sequence, state, ER, charts) |
 
 ### Cognee lifecycle coverage vs. typical hackathon builds
 
@@ -151,6 +155,32 @@ pie showData
 | Which memory operations does Cognee provide? | cognee | graph-completion |
 
 > Reproduce it yourself: `python backend/benchmark_recall.py --url <backend-url>`. The script writes this table to `backend/benchmark_results.md`.
+
+### Live production status
+
+The backend exposes its routing state at the root endpoint, so anyone can confirm the hosted Cognee Cloud tenant is active (not a local mock). Hitting the live backend returns:
+
+```json
+{
+  "service": "engram-cognee",
+  "status": "ok",
+  "cognee": {
+    "cloud_enabled": true,
+    "cloud_connected": true,
+    "local_sdk_ready": true,
+    "missing_cloud_env": [],
+    "recall_source": "cognee-cloud"
+  }
+}
+```
+
+| Signal | Value | Meaning |
+|---|:---:|---|
+| `cloud_enabled` | `true` | Both Cognee Cloud credentials are configured in production |
+| `cloud_connected` | `true` | Startup health check reached the tenant successfully |
+| `recall_source` | `cognee-cloud` | Recall routes to the Cognee graph first, verified live |
+
+This is backed by a dedicated diagnostic path (`cognee_status()`), and a companion `GET /cognee/graph-status` endpoint powers the live "graph is building" indicator shown on the ingest screen while the tenant finishes `cognify`.
 
 ---
 
@@ -219,7 +249,7 @@ Most "memory for AI" projects stop at *store and retrieve*. Engram treats memory
 | **Creativity & Innovation** | [The Reconciliation Engine](#101-the-reconciliation-engine) + "What Changed?" diff query — most memory tools stop at recall; this one decides what still deserves trust |
 | **Technical Excellence** | [Core Architecture & Memory Lifecycle](#6-core-architecture-and-memory-lifecycle) + [Cognee API Mapping](#8-cognee-api-mapping) below |
 | **Best Use of Cognee** | Full lifecycle usage — `remember`/`recall`/`improve`/`forget` are all load-bearing, wired to **both the local SDK and a hosted Cognee Cloud tenant** (REST), and verified end-to-end by [`test_cognee_cloud.py`](#81-verifying-the-lifecycle-end-to-end) |
-| **User Experience** | Screenshots of `/resolve`, `/graph`, and `/ask` (provided in the `frontend/public/images/` folder and accessible via local run) |
+| **User Experience** | The [Product walkthrough](#product-walkthrough) screenshots + a live "graph is building" indicator, animated landing, and the interactive `/ask` and `/resolve` flows |
 | **Presentation Quality** | The WeMakeDevs project submission page + this comprehensive README |
 
 ---
@@ -606,7 +636,7 @@ All backend routes require the shared `X-Engram-Key` header (injected by the Ver
 
 | Method | Endpoint | Purpose | Rate limit |
 |---|---|---|---|
-| `GET` | `/` | Service metadata (links to `/docs`, `/health`) | — |
+| `GET` | `/` | Service metadata + live Cognee routing status | — |
 | `GET` | `/health` | Liveness probe | — |
 | `POST` | `/ingest` | Ingest a source (pdf, github, article, youtube, conversation, text) | 10/min |
 | `GET` | `/ingest/{job_id}` | Poll an ingestion job | — |
@@ -627,6 +657,7 @@ All backend routes require the shared `X-Engram-Key` header (injected by the Ver
 | `POST` | `/forget/source` | Prune an entire source | — |
 | `POST` | `/reset-demo` | Reset demo data | — |
 | `GET` | `/cognee/activity` | Live Cognee operation log | — |
+| `GET` | `/cognee/graph-status` | Graph build state (building / ready / node count) | — |
 | `GET` | `/provenance` | Cognee provenance HTML (rendered in an iframe) | — |
 | `GET` | `/schema-inventory` | Entity-type inventory with samples | — |
 | `GET` | `/recap` | "Where's My Context?" digest (window in days) | 20/min |
@@ -893,6 +924,16 @@ flowchart LR
 ---
 
 ## 21. Roadmap
+
+**Recently shipped**
+
+- [x] Hosted Cognee Cloud routing live in production, verified by `/` status (`recall_source: cognee-cloud`).
+- [x] Measured 100% Cognee-served recall over a 10-query live-tenant benchmark.
+- [x] `GET /cognee/graph-status` endpoint + live "graph is building" indicator on ingest.
+- [x] Root diagnostic (`cognee_status()`) that surfaces cloud config state and any missing env vars.
+- [x] Free-text note ingestion (the sixth source type).
+
+**Next up**
 
 - [ ] Server-side chat history persistence (move `/ask` history off `localStorage`).
 - [ ] Map decay-sweep pruning to tenant `dataId`s so decay `forget()` runs fully on Cognee Cloud.
