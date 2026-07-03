@@ -29,19 +29,39 @@ class CogneeCloudClient:
         if tenant_id:
             self._headers["X-Tenant-Id"] = tenant_id
         self._timeout = timeout
+        # A single pooled client reused across requests. Keep-alive connections
+        # skip the TCP + TLS handshake on every call, which is the dominant
+        # per-request latency when talking to the hosted tenant.
+        self._http: Optional[httpx.AsyncClient] = None
+
+    def _pool(self) -> httpx.AsyncClient:
+        if self._http is None or self._http.is_closed:
+            self._http = httpx.AsyncClient(
+                limits=httpx.Limits(
+                    max_keepalive_connections=10,
+                    max_connections=20,
+                    keepalive_expiry=30.0,
+                ),
+            )
+        return self._http
+
+    async def aclose(self) -> None:
+        if self._http is not None and not self._http.is_closed:
+            await self._http.aclose()
+        self._http = None
 
     async def _request(self, method: str, path: str, **kwargs) -> Any:
         url = f"{self.base_url}{path}"
         # Cap the connect phase so a flaky/unreachable tenant fails fast (and the
         # caller falls back to local memory) instead of hanging for the full read timeout.
         timeout = httpx.Timeout(self._timeout, connect=10.0)
-        async with httpx.AsyncClient(timeout=timeout) as client:
-            resp = await client.request(method, url, headers=self._headers, **kwargs)
-            resp.raise_for_status()
-            ctype = resp.headers.get("content-type", "")
-            if "application/json" in ctype:
-                return resp.json()
-            return resp.text
+        client = self._pool()
+        resp = await client.request(method, url, headers=self._headers, timeout=timeout, **kwargs)
+        resp.raise_for_status()
+        ctype = resp.headers.get("content-type", "")
+        if "application/json" in ctype:
+            return resp.json()
+        return resp.text
 
     # ── Health / datasets ──
     async def health(self) -> Any:

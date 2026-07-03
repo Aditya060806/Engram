@@ -133,6 +133,18 @@ async def startup_event():
             print(f"[Cognee] Startup migrations failed: {e}", flush=True)
 
 
+@app.on_event("shutdown")
+async def shutdown_event():
+    # Cleanly close the pooled Cognee Cloud connections on shutdown.
+    try:
+        from cognee_cloud import get_cloud_client
+        client = get_cloud_client()
+        if client:
+            await client.aclose()
+    except Exception:
+        pass
+
+
 
 @app.get("/")
 async def root():
