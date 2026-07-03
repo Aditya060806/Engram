@@ -32,6 +32,13 @@ const sourceIcons: Record<SourceType, React.ReactNode> = {
       <path d="M6 5.5L8.5 7L6 8.5V5.5Z" fill="currentColor" stroke="none" />
     </svg>
   ),
+  text: (
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3 3.5H11" />
+      <path d="M3 7H11" />
+      <path d="M3 10.5H8" />
+    </svg>
+  ),
 };
 
 interface SourcePillProps {

@@ -1,4 +1,4 @@
-export type SourceType = "pdf" | "github" | "conversation" | "article" | "youtube";
+export type SourceType = "pdf" | "github" | "conversation" | "article" | "youtube" | "text";
 
 export type SourceStatus = "processing" | "ready" | "failed";
 

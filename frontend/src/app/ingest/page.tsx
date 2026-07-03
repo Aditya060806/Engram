@@ -7,7 +7,7 @@ import { ingestSource } from "@/lib/api";
 import type { SourceType } from "@/lib/types";
 import { useIngestion } from "@/context/IngestionContext";
 
-type Tab = "github" | "pdf" | "article" | "youtube";
+type Tab = "github" | "pdf" | "article" | "youtube" | "text";
 
 export default function IngestPage() {
   const { jobStatus, currentStep, progress, error, startSync, resetSync } = useIngestion();
@@ -21,6 +21,8 @@ export default function IngestPage() {
   const [articleLabel, setArticleLabel] = useState("");
   const [youtubeUrl, setYoutubeUrl] = useState("");
   const [youtubeLabel, setYoutubeLabel] = useState("");
+  const [noteText, setNoteText] = useState("");
+  const [noteLabel, setNoteLabel] = useState("");
   const [apiError, setApiError] = useState<string | null>(null);
   const [showImportModal, setShowImportModal] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -32,6 +34,7 @@ export default function IngestPage() {
   };
 
   const tabs: { key: Tab; label: string }[] = [
+    { key: "text", label: "Note" },
     { key: "github", label: "GitHub" },
     { key: "pdf", label: "Upload PDF" },
     { key: "article", label: "Article URL" },
@@ -64,6 +67,12 @@ export default function IngestPage() {
         content = `YouTube URL: ${youtubeUrl}`;
         label = youtubeLabel || "YouTube Transcript";
         url = youtubeUrl;
+      } else if (activeTab === "text") {
+        if (!noteText.trim()) return;
+        sourceType = "text";
+        content = noteText.trim();
+        label = noteLabel.trim() || noteText.trim().split(/\s+/).slice(0, 6).join(" ").slice(0, 60) || "Note";
+        url = undefined;
       } else {
         if (pdfFiles.length === 0) return;
         const file = pdfFiles[0];
@@ -98,6 +107,8 @@ export default function IngestPage() {
     setArticleLabel("");
     setYoutubeUrl("");
     setYoutubeLabel("");
+    setNoteText("");
+    setNoteLabel("");
   };
 
   const handlePdfClick = () => {
@@ -120,8 +131,8 @@ export default function IngestPage() {
           <div className="caption-upper text-muted mb-2.5">Remember · ingest</div>
           <h1 className="display-lg text-ink">Give it something to remember</h1>
           <p className="mt-2 text-base text-body leading-relaxed max-w-xl" style={{ letterSpacing: "0.15px" }}>
-            Point Engram at a repo, PDF, article, video, or chat export. It extracts the meaning,
-            checks it against what you already know, and weaves it into your graph, permanently.
+            Write a quick note, or point Engram at a repo, PDF, article, video, or chat export. It extracts
+            the meaning, checks it against what you already know, and weaves it into your graph, permanently.
           </p>
         </div>
 
@@ -155,6 +166,35 @@ export default function IngestPage() {
         </div>
 
         <div className="bg-surface-card border border-hairline rounded-2xl p-4 sm:p-6 md:p-8 shadow-[0_4px_20px_rgba(0,0,0,0.02)] space-y-6">
+          {activeTab === "text" && (
+            <div className="space-y-5">
+              <div>
+                <label className="block text-sm font-medium text-body-strong mb-2">Note title (optional)</label>
+                <input
+                  type="text"
+                  value={noteLabel}
+                  onChange={(e) => setNoteLabel(e.target.value)}
+                  placeholder="e.g. Decision: switched database to Supabase"
+                  disabled={isDisabled}
+                  className="w-full px-4 py-3 rounded-lg bg-surface-card border border-hairline-strong text-sm text-ink placeholder:text-muted-soft focus:outline-none focus:border-ink focus:ring-1 focus:ring-ink/20 transition-all duration-200"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-body-strong mb-2">Write something to remember</label>
+                <textarea
+                  value={noteText}
+                  onChange={(e) => setNoteText(e.target.value)}
+                  placeholder="Type any note, fact, or decision. Engram will structure it into your knowledge graph and reconcile it against what you already know."
+                  disabled={isDisabled}
+                  rows={8}
+                  maxLength={500000}
+                  className="w-full px-4 py-3 rounded-lg bg-surface-card border border-hairline-strong text-sm text-ink placeholder:text-muted-soft focus:outline-none focus:border-ink focus:ring-1 focus:ring-ink/20 transition-all duration-200 resize-y leading-relaxed"
+                />
+                <p className="mt-1.5 text-xs text-muted-soft">{noteText.trim().length} characters</p>
+              </div>
+            </div>
+          )}
+
           {activeTab === "github" && (
             <div className="space-y-5">
               <div>
