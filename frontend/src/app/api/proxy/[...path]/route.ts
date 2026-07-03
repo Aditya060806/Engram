@@ -48,11 +48,19 @@ async function handleProxy(request: NextRequest, pathArray: string[]) {
       return NextResponse.json({ error: "Request body too large" }, { status: 413 });
     }
 
-    const res = await fetch(url.toString(), {
-      method: request.method,
-      headers,
-      body: requestBody,
-    });
+    // Retry transient gateway errors (502/503/504). On free-tier hosting the
+    // backend sleeps when idle and the first request wakes it, returning a
+    // gateway error for a few seconds. These statuses mean the request never
+    // reached the app, so retrying is safe even for POST.
+    const doFetch = () =>
+      fetch(url.toString(), { method: request.method, headers, body: requestBody });
+    let res = await doFetch();
+    let attempts = 0;
+    while ((res.status === 502 || res.status === 503 || res.status === 504) && attempts < 2) {
+      attempts++;
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+      res = await doFetch();
+    }
 
     const data = await res.arrayBuffer();
     return new NextResponse(data, {

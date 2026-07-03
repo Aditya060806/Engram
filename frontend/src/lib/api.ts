@@ -39,6 +39,9 @@ function parseAPIError(status: number, body: string): string {
   if (status === 403) return "Access denied.";
   if (status === 401) return "Unauthorized session. Please check your credentials.";
   if (status === 404) return "Requested resource not found.";
+  if (status === 502 || status === 503 || status === 504) {
+    return "The backend is waking up (free hosting sleeps when idle). Give it up to a minute, then ask again.";
+  }
   if (status >= 500) return "Server error. Make sure the backend is running correctly.";
   return `Request failed with status ${status}`;
 }
