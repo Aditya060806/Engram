@@ -282,6 +282,32 @@ export async function rememberChatTurn(
   });
 }
 
+// ── Server-side chat history (durable, cross-device) ──
+export interface ServerConversationMeta {
+  id: string;
+  title: string;
+  updatedAt: string;
+}
+
+export async function listServerConversations(): Promise<ServerConversationMeta[]> {
+  return fetchAPI("/chat/conversations");
+}
+
+export async function getServerConversation(convId: string): Promise<{ id: string; messages: ChatMessage[] }> {
+  return fetchAPI(`/chat/conversations/${encodeURIComponent(convId)}`);
+}
+
+export async function saveServerConversation(convId: string, title: string, messages: ChatMessage[]): Promise<void> {
+  await fetchAPI("/chat/conversations", {
+    method: "POST",
+    body: JSON.stringify({ convId, title, messages }),
+  });
+}
+
+export async function deleteServerConversation(convId: string): Promise<void> {
+  await fetchAPI(`/chat/conversations/${encodeURIComponent(convId)}`, { method: "DELETE" });
+}
+
 export async function addSessionFeedback(
   sessionId: string,
   qaId: string,

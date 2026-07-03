@@ -1,7 +1,15 @@
 "use client";
 
 import React, { createContext, useContext, useState, useEffect, useRef, useCallback } from "react";
-import { answerQuery, addSessionFeedback, distillSession } from "@/lib/api";
+import {
+  answerQuery,
+  addSessionFeedback,
+  distillSession,
+  listServerConversations,
+  getServerConversation,
+  saveServerConversation,
+  deleteServerConversation,
+} from "@/lib/api";
 import type { ChatMessage, GuidanceResult } from "@/lib/types";
 
 export interface ConversationMeta {
@@ -148,6 +156,33 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     };
   }, []);
 
+  // Hydrate the conversation index from the server so past chats appear even on
+  // a fresh device or after a browser clear. Merges with local, newest first.
+  useEffect(() => {
+    let cancelled = false;
+    listServerConversations()
+      .then((server) => {
+        if (cancelled || !server || server.length === 0) return;
+        const local = getConvIndex();
+        const byId = new Map<string, ConversationMeta>();
+        for (const c of local) byId.set(c.id, c);
+        for (const s of server) {
+          if (!byId.has(s.id)) {
+            byId.set(s.id, { id: s.id, title: s.title, updatedAt: s.updatedAt, messageCount: 0 });
+          }
+        }
+        const merged = Array.from(byId.values()).sort(
+          (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
+        );
+        persistConvIndex(merged);
+        setConvIndex(merged);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const setFeedback = useCallback(async (msgId: string, qaId: string | undefined, score: 1 | -1) => {
     if (!qaId) return;
     setFeedbackState(prev => ({ ...prev, [msgId]: score === 1 ? "up" : "down" }));
@@ -200,18 +235,33 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
       setMessages(stored);
       setActiveConvId(convId);
       localStorage.setItem(ACTIVE_CONV_KEY, convId);
-    } else {
-      // Remove stale/broken conversation from index
-      const index = getConvIndex();
-      const updated = index.filter(c => c.id !== convId);
-      persistConvIndex(updated);
-      setConvIndex(updated);
+      setShowHistory(false);
+      return;
     }
+    // Not cached locally (e.g. opened on another device): pull from the server.
+    getServerConversation(convId)
+      .then((res) => {
+        if (res?.messages?.length) {
+          saveConvMessages(convId, res.messages);
+          setMessages(res.messages);
+          setActiveConvId(convId);
+          localStorage.setItem(ACTIVE_CONV_KEY, convId);
+        } else {
+          throw new Error("empty");
+        }
+      })
+      .catch(() => {
+        const index = getConvIndex();
+        const updated = index.filter((c) => c.id !== convId);
+        persistConvIndex(updated);
+        setConvIndex(updated);
+      });
     setShowHistory(false);
   }, []);
 
   const deleteConversation = useCallback((convId: string) => {
     deleteConvMessages(convId);
+    void deleteServerConversation(convId).catch(() => {});
     const index = getConvIndex();
     const updated = index.filter(c => c.id !== convId);
     persistConvIndex(updated);
@@ -289,12 +339,18 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
       
       saveConvMessages(currentId, next);
       setMessages(next);
+
+      // Mirror to the server so history is durable and cross-device (best-effort).
+      void saveServerConversation(currentId, generateTitle(next), next).catch(() => {});
     };
 
     try {
       const response = await answerQuery(q, controller.signal);
       if (epoch !== epochRef.current) return;
       handleSaveConversation(response);
+      // Note: the turn is persisted into Cognee memory by the backend inside
+      // answer_query (with richer context), so we intentionally do NOT call
+      // rememberChatTurn here, doing so would double-write and double-cognify.
     } catch (e) {
       if ((e as Error)?.name === "AbortError") return;
       if (epoch !== epochRef.current) return;
