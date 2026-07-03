@@ -1,6 +1,8 @@
 import os
+import time
 import asyncio
 from fastapi import Depends, FastAPI, Header, HTTPException, Request
+from metrics import record as record_metric, summary as metrics_summary
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
 from slowapi import Limiter
@@ -100,6 +102,24 @@ async def inject_user_context(request: Request, call_next):
     return await call_next(request)
 
 
+# Outermost middleware: time every request, record it, and surface the duration
+# on the response so latency can be measured directly (see GET /metrics).
+@app.middleware("http")
+async def timing_middleware(request: Request, call_next):
+    start = time.perf_counter()
+    response = await call_next(request)
+    elapsed_ms = (time.perf_counter() - start) * 1000.0
+    route = request.scope.get("route")
+    endpoint = f"{request.method} {getattr(route, 'path', request.url.path)}"
+    try:
+        record_metric(endpoint, elapsed_ms)
+        response.headers["X-Response-Time-Ms"] = f"{elapsed_ms:.1f}"
+        response.headers["Server-Timing"] = f"app;dur={elapsed_ms:.1f}"
+    except Exception:
+        pass
+    return response
+
+
 @app.on_event("startup")
 async def startup_event():
     import cognee
@@ -160,6 +180,11 @@ async def root():
 @app.get("/health")
 async def health():
     return {"status": "ok", "service": "engram-cognee"}
+
+
+@app.get("/metrics")
+async def metrics():
+    return {"endpoints": metrics_summary()}
 
 
 @app.post("/ingest")

@@ -92,12 +92,27 @@ def ingest_corpus(client: httpx.Client, base: str):
             time.sleep(5)
 
 
+def _percentile(sorted_vals, pct):
+    if not sorted_vals:
+        return 0.0
+    k = (len(sorted_vals) - 1) * pct
+    f = int(k)
+    c = min(f + 1, len(sorted_vals) - 1)
+    if f == c:
+        return sorted_vals[f]
+    return sorted_vals[f] + (sorted_vals[c] - sorted_vals[f]) * (k - f)
+
+
 def run_queries(client: httpx.Client, base: str):
     print("\n-- Running recall queries --")
     rows = []
     cognee = 0
+    latencies = []  # client-side wall-clock ms (includes network)
+    server_latencies = []  # backend-only ms from X-Response-Time-Ms
     for q in QUERIES:
+        t0 = time.perf_counter()
         r = client.post(f"{base}/recall", headers=headers(), json={"query": q})
+        elapsed_ms = (time.perf_counter() - t0) * 1000.0
         r.raise_for_status()
         data = r.json()
         provider = (data.get("provider") or "unknown").lower()
@@ -105,13 +120,40 @@ def run_queries(client: httpx.Client, base: str):
         is_cognee = provider == "cognee"
         cognee += 1 if is_cognee else 0
         tag = "COGNEE " if is_cognee else "fallback"
+        server_ms = r.headers.get("X-Response-Time-Ms")
+        latencies.append(elapsed_ms)
+        if server_ms:
+            try:
+                server_latencies.append(float(server_ms))
+            except ValueError:
+                pass
         rows.append((q, provider, model, is_cognee))
-        print(f"  [{tag}] {provider}/{model}  <-  {q}")
+        srv = f", server {server_ms}ms" if server_ms else ""
+        print(f"  [{tag}] {provider}/{model}  ({elapsed_ms:.0f}ms{srv})  <-  {q}")
         time.sleep(3.2)  # /recall is rate-limited to 20/min
-    return rows, cognee
+    stats = _latency_stats(latencies, server_latencies)
+    return rows, cognee, stats
 
 
-def write_report(rows, cognee, total):
+def _latency_stats(latencies, server_latencies):
+    s = sorted(latencies)
+    stats = {
+        "count": len(s),
+        "avg_ms": round(sum(s) / len(s), 1) if s else 0.0,
+        "p50_ms": round(_percentile(s, 0.50), 1),
+        "p95_ms": round(_percentile(s, 0.95), 1),
+        "min_ms": round(s[0], 1) if s else 0.0,
+        "max_ms": round(s[-1], 1) if s else 0.0,
+    }
+    if server_latencies:
+        ss = sorted(server_latencies)
+        stats["server_avg_ms"] = round(sum(ss) / len(ss), 1)
+        stats["server_p50_ms"] = round(_percentile(ss, 0.50), 1)
+        stats["server_p95_ms"] = round(_percentile(ss, 0.95), 1)
+    return stats
+
+
+def write_report(rows, cognee, total, stats):
     pct = round(100 * cognee / total) if total else 0
     fb = total - cognee
     fb_pct = 100 - pct
@@ -130,6 +172,15 @@ def write_report(rows, cognee, total):
         "",
         f"- Cognee-served: **{cognee}/{total} ({pct}%)**",
         f"- LLM fallback: **{fb}/{total} ({fb_pct}%)**",
+        "",
+        "### Measured recall latency",
+        "",
+        "| Metric | End-to-end (client) | Backend (server) |",
+        "|---|---|---|",
+        f"| Average | {stats.get('avg_ms', 0)} ms | {stats.get('server_avg_ms', 'n/a')} ms |",
+        f"| Median (p50) | {stats.get('p50_ms', 0)} ms | {stats.get('server_p50_ms', 'n/a')} ms |",
+        f"| p95 | {stats.get('p95_ms', 0)} ms | {stats.get('server_p95_ms', 'n/a')} ms |",
+        f"| Min / Max | {stats.get('min_ms', 0)} / {stats.get('max_ms', 0)} ms | - |",
         "",
         "| Query | Provider | Model |",
         "|---|---|---|",
@@ -162,13 +213,16 @@ def main():
         if not args.no_ingest:
             ingest_corpus(client, base)
 
-        rows, cognee = run_queries(client, base)
+        rows, cognee, stats = run_queries(client, base)
 
     total = len(rows)
-    pct = write_report(rows, cognee, total)
+    pct = write_report(rows, cognee, total, stats)
     print("\n=== Summary ===")
     print(f"  Cognee-served: {cognee}/{total} ({pct}%)")
     print(f"  LLM fallback:  {total - cognee}/{total} ({100 - pct}%)")
+    print(f"  Latency (end-to-end): avg {stats.get('avg_ms', 0)}ms, p50 {stats.get('p50_ms', 0)}ms, p95 {stats.get('p95_ms', 0)}ms")
+    if stats.get("server_avg_ms") is not None:
+        print(f"  Latency (backend):    avg {stats.get('server_avg_ms')}ms, p50 {stats.get('server_p50_ms')}ms, p95 {stats.get('server_p95_ms')}ms")
     print("  Wrote benchmark_results.md")
 
 
