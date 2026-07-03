@@ -558,16 +558,45 @@ export default function LandingPage() {
       <section id="cta" className="px-5 sm:px-6 pb-20 sm:pb-24">
         <div className="max-w-[1180px] mx-auto">
           <Reveal>
-            <div className="relative overflow-hidden rounded-[28px] bg-surface-dark text-on-dark px-7 sm:px-14 py-14 sm:py-20 text-center">
-              <div aria-hidden className="ambient-orb absolute -top-20 -left-10 w-72 h-72 rounded-full blur-[80px] opacity-10 bg-on-dark" />
-              <div aria-hidden className="ambient-orb absolute -bottom-24 -right-10 w-80 h-80 rounded-full blur-[90px] opacity-10 bg-on-dark" style={{ animationDelay: "2s" }} />
-              <div className="relative">
-                <h2 className="display-xl">Give your AI a memory that lasts.</h2>
-                <p className="mt-5 text-base sm:text-[17px] text-on-dark-soft max-w-xl mx-auto leading-relaxed">Sign in with GitHub or Google and start building a knowledge graph that reconciles itself.</p>
-                <button onClick={enter} className="sheen mt-8 sm:mt-9 inline-flex items-center gap-2 px-7 py-3.5 rounded-full bg-on-dark text-surface-dark text-[15px] font-semibold hover:opacity-90 transition-all hover:scale-[1.02] active:scale-95 cursor-pointer">
-                  {session ? "Open the app" : "Get started free"}
-                  <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M13 6l6 6-6 6" /></svg>
-                </button>
+            <div className="relative overflow-hidden rounded-[28px] bg-surface-dark text-on-dark px-6 sm:px-14 py-14 sm:py-20">
+              {/* dot grid */}
+              <div aria-hidden className="absolute inset-0" style={{ backgroundImage: "radial-gradient(circle at 1px 1px, rgba(255,255,255,0.07) 1px, transparent 0)", backgroundSize: "26px 26px", WebkitMaskImage: "radial-gradient(ellipse 72% 62% at 50% 42%, #000 28%, transparent 100%)", maskImage: "radial-gradient(ellipse 72% 62% at 50% 42%, #000 28%, transparent 100%)" }} />
+              {/* colored aurora glow */}
+              <div aria-hidden className="ambient-orb absolute -top-24 -left-12 w-80 h-80 rounded-full blur-[90px] opacity-25" style={{ background: "var(--color-gradient-lavender)" }} />
+              <div aria-hidden className="ambient-orb absolute -bottom-28 -right-12 w-96 h-96 rounded-full blur-[100px] opacity-20" style={{ background: "var(--color-gradient-sky)", animationDelay: "2.5s" }} />
+
+              <div className="relative text-center">
+                <span className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full border border-on-dark/15 bg-on-dark/5 backdrop-blur-sm caption-upper text-on-dark-soft">
+                  <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: "var(--color-gradient-mint)" }} /> Free · open source · self-hosted
+                </span>
+                <h2 className="display-xl mt-6">Give your AI a memory that lasts.</h2>
+                <p className="mt-5 text-base sm:text-[17px] text-on-dark-soft max-w-xl mx-auto leading-relaxed">Sign in with GitHub or Google and start building a knowledge graph that catches contradictions the moment they appear and forgets only what has stopped mattering.</p>
+
+                <div className="mt-8 flex flex-col sm:flex-row items-center justify-center gap-3">
+                  <button onClick={enter} className="sheen inline-flex items-center gap-2 px-7 py-3.5 rounded-full bg-on-dark text-surface-dark text-[15px] font-semibold hover:opacity-90 transition-all hover:scale-[1.02] active:scale-95 cursor-pointer w-full sm:w-auto justify-center">
+                    {session ? "Open the app" : "Get started free"}
+                    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M13 6l6 6-6 6" /></svg>
+                  </button>
+                  <a href="https://github.com/Aditya060806/Engram" target="_blank" rel="noreferrer" onMouseEnter={sfxTick} className="tap inline-flex items-center gap-2 px-7 py-3.5 rounded-full border border-on-dark/20 text-on-dark text-[15px] font-semibold hover:bg-on-dark/10 transition-colors w-full sm:w-auto justify-center">
+                    <svg viewBox="0 0 24 24" fill="currentColor" width="17" height="17"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z" /></svg>
+                    View on GitHub
+                  </a>
+                </div>
+
+                {/* animated quick-start steps */}
+                <div className="mt-10 flex flex-wrap items-center justify-center gap-2">
+                  {["Sign in", "Ingest a source", "Ask anything"].map((label, i) => (
+                    <div key={label} className="flex items-center gap-2">
+                      <div className="inline-flex items-center gap-2 px-3.5 py-2 rounded-full border border-on-dark/12 bg-on-dark/5 text-[13px] font-medium text-on-dark-soft">
+                        <span className="w-5 h-5 rounded-full bg-on-dark text-surface-dark flex items-center justify-center text-[11px] font-bold">{i + 1}</span>
+                        {label}
+                      </div>
+                      {i < 2 && (
+                        <svg className="hidden sm:block text-on-dark/30" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M13 6l6 6-6 6" /></svg>
+                      )}
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
           </Reveal>
@@ -575,18 +604,54 @@ export default function LandingPage() {
       </section>
 
       {/* ═══════ FOOTER ═══════ */}
-      <footer className="px-5 sm:px-6 py-12 sm:py-14 border-t border-hairline">
-        <div className="max-w-[1180px] mx-auto flex flex-col md:flex-row items-center justify-between gap-6">
-          <div className="flex items-center gap-2.5"><Image src="/logo.png" alt="Engram" width={26} height={26} className="object-contain rounded-md" /><span className="text-[16px] font-semibold tracking-tight">Engram</span></div>
-          <div className="flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-[14px] text-body">
-            <a href="https://github.com/Aditya060806/Engram" target="_blank" rel="noreferrer" className="hover:text-ink transition-colors">Repository</a>
-            <a href="https://github.com/Aditya060806/Engram/blob/main/README.md" target="_blank" rel="noreferrer" className="hover:text-ink transition-colors">Documentation</a>
-            <a href="https://cognee.ai" target="_blank" rel="noreferrer" className="hover:text-ink transition-colors">Powered by Cognee</a>
+      <footer className="relative px-5 sm:px-6 pt-14 pb-10 border-t border-hairline overflow-hidden">
+        <div aria-hidden className="absolute inset-0 grid-backdrop opacity-40 pointer-events-none" />
+        <div className="relative max-w-[1180px] mx-auto grid grid-cols-2 md:grid-cols-[1.5fr_1fr_1fr_1fr] gap-8 sm:gap-10">
+          <div className="col-span-2 md:col-span-1">
+            <div className="flex items-center gap-2.5 group cursor-default">
+              <Image src="/logo.png" alt="Engram" width={28} height={28} className="object-contain rounded-md transition-transform duration-500 group-hover:rotate-[10deg]" />
+              <span className="text-[17px] font-semibold tracking-tight">Engram</span>
+            </div>
+            <p className="mt-3.5 text-[13px] text-muted leading-relaxed max-w-[240px]">A self-organizing memory layer that reconciles what it knows and forgets what no longer matters.</p>
+            <a href="https://github.com/Aditya060806/Engram" target="_blank" rel="noreferrer" className="sheen tap mt-5 inline-flex items-center gap-2 px-4 py-2 rounded-full border border-hairline bg-surface-card text-[13px] font-semibold text-ink hover:bg-surface-strong transition-colors">
+              <svg viewBox="0 0 24 24" fill="currentColor" width="15" height="15"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z" /></svg>
+              Star on GitHub
+            </a>
           </div>
+
+          <FooterCol title="Explore" links={[
+            { label: "Lifecycle", href: "#lifecycle" },
+            { label: "Sources", href: "#sources" },
+            { label: "Features", href: "#features" },
+            { label: "FAQ", href: "#faq" },
+          ]} onNav={handleNavClick} />
+
+          <FooterCol title="Resources" links={[
+            { label: "Repository", href: "https://github.com/Aditya060806/Engram", external: true },
+            { label: "Documentation", href: "https://github.com/Aditya060806/Engram/blob/main/README.md", external: true },
+            { label: "Powered by Cognee", href: "https://cognee.ai", external: true },
+          ]} />
+
+          <FooterCol title="Connect" links={[
+            { label: "GitHub", href: "https://github.com/Aditya060806/Engram", external: true },
+            { label: "Aditya Pandey", href: "https://github.com/Aditya060806", external: true },
+          ]} />
         </div>
-        <div className="max-w-[1180px] mx-auto mt-10 pt-6 border-t border-hairline flex flex-col sm:flex-row items-center justify-between gap-3 text-[13px] text-muted">
+
+        <div className="relative max-w-[1180px] mx-auto my-8 divider-sweep" />
+
+        <div className="relative max-w-[1180px] mx-auto flex flex-col sm:flex-row items-center justify-between gap-4 text-[13px] text-muted">
           <p>© 2026 Engram. Built for the WeMakeDevs and Cognee Hackathon.</p>
-          <p>Developed by <a href="https://github.com/Aditya060806" target="_blank" rel="noreferrer" className="text-body hover:text-ink transition-colors underline decoration-dotted underline-offset-4">Aditya Pandey</a></p>
+          <div className="flex items-center gap-5">
+            <p>Developed by <a href="https://github.com/Aditya060806" target="_blank" rel="noreferrer" className="text-body hover:text-ink transition-colors underline decoration-dotted underline-offset-4">Aditya Pandey</a></p>
+            <button
+              onClick={() => { sfxTick(); if (lenisRef.current) lenisRef.current.scrollTo(0, { duration: 1.1 }); else window.scrollTo({ top: 0, behavior: "smooth" }); }}
+              className="tap inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-hairline bg-surface-card text-[12px] font-medium text-body hover:text-ink hover:bg-surface-strong transition-colors cursor-pointer"
+            >
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 19V5M6 11l6-6 6 6" /></svg>
+              Top
+            </button>
+          </div>
         </div>
       </footer>
     </div>
@@ -597,6 +662,35 @@ export default function LandingPage() {
 
 function IconChip({ tint, children }: { tint: string; children: React.ReactNode }) {
   return <div className="w-11 h-11 rounded-xl flex items-center justify-center" style={chip(tint)}>{children}</div>;
+}
+
+function FooterCol({ title, links, onNav }: {
+  title: string;
+  links: { label: string; href: string; external?: boolean }[];
+  onNav?: (e: React.MouseEvent<HTMLAnchorElement>, target: string) => void;
+}) {
+  return (
+    <div>
+      <p className="caption-upper text-muted-soft mb-3.5">{title}</p>
+      <ul className="space-y-2.5">
+        {links.map((l) => (
+          <li key={l.label}>
+            <a
+              href={l.href}
+              {...(l.external ? { target: "_blank", rel: "noreferrer" } : {})}
+              onClick={l.external || !onNav ? undefined : (e) => onNav(e, l.href)}
+              className="group inline-flex items-center gap-1.5 text-[13.5px] text-body hover:text-ink transition-colors"
+            >
+              <span className="relative after:absolute after:left-0 after:-bottom-0.5 after:h-px after:w-0 after:bg-ink after:transition-all group-hover:after:w-full">{l.label}</span>
+              {l.external && (
+                <svg className="opacity-0 -translate-x-1 group-hover:opacity-60 group-hover:translate-x-0 transition-all duration-200" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M7 17L17 7M9 7h8v8" /></svg>
+              )}
+            </a>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
 }
 
 function MarqueeRow({ items, duration, reverse = false }: { items: MItem[]; duration: number; reverse?: boolean }) {
