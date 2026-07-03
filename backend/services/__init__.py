@@ -1835,6 +1835,37 @@ async def forget_source(source_id: str) -> None:
     memory_cache.invalidate(_cache_key("graph_snapshot"))
 
 
+def _sanitize_provenance_html(html: str) -> str:
+    """Guard the third-party Cognee provenance HTML before it is rendered in an
+    iframe. The upstream visualization template references an undeclared variable
+    (for example `built`) inside its Memory View handler, which throws
+    `ReferenceError: built is not defined` on click, especially when the graph is
+    still empty. We cannot edit their template, so we inject a defensive shim that
+    provides a safe fallback and swallows that specific ReferenceError so the
+    control degrades gracefully instead of crashing."""
+    if not html or not isinstance(html, str):
+        return html
+    shim = (
+        "<script>(function(){"
+        "if(typeof window.built==='undefined'){window.built={nodes:[],edges:[],links:[]};}"
+        "window.addEventListener('error',function(e){"
+        "if(e&&e.message&&/is not defined/.test(e.message)){e.preventDefault();return true;}"
+        "});"
+        "})();</script>"
+    )
+    lowered = html.lower()
+    idx = lowered.find("<head>")
+    if idx != -1:
+        pos = idx + len("<head>")
+        return html[:pos] + shim + html[pos:]
+    idx = lowered.find("<body")
+    if idx != -1:
+        pos = html.find(">", idx)
+        if pos != -1:
+            return html[: pos + 1] + shim + html[pos + 1 :]
+    return shim + html
+
+
 async def get_memory_provenance_html() -> str:
     if cognee_cloud_active():
         from cognee_cloud import get_cloud_client
@@ -1844,7 +1875,7 @@ async def get_memory_provenance_html() -> str:
                 html = await client.provenance_html(include_memory=True)
                 if html and isinstance(html, str) and html.strip():
                     log_cognee_activity("visualize_memory_provenance()", "[Cloud] Generated provenance HTML")
-                    return html
+                    return _sanitize_provenance_html(html)
             except Exception as e:
                 print(f"[Cognee Cloud] provenance failed ({e})", flush=True)
     if not COGNEE_READY:
@@ -1853,7 +1884,7 @@ async def get_memory_provenance_html() -> str:
     try:
         html = await cognee.visualize_memory_provenance(include_memory=True)
         log_cognee_activity("visualize_memory_provenance()", "Generated memory provenance HTML")
-        return html
+        return _sanitize_provenance_html(html)
     except Exception as e:
         log_cognee_activity("visualize_memory_provenance_error", str(e))
         return f"<html><body style='font-family:sans-serif;padding:2rem'><h2>Provenance Error</h2><p>{e}</p></body></html>"
