@@ -16,10 +16,10 @@ pie showData
 
 | Metric | End-to-end (client) | Backend (server) |
 |---|---|---|
-| Average | 11670.4 ms | 11310.4 ms |
-| Median (p50) | 8437.2 ms | 7999.1 ms |
-| p95 | 26454.9 ms | 26147.0 ms |
-| Min / Max | 7825.7 / 40140.3 ms | - |
+| Average | 13706.7 ms | 13345.7 ms |
+| Median (p50) | 9072.8 ms | 8535.4 ms |
+| p95 | 33426.8 ms | 33041.1 ms |
+| Min / Max | 7335.8 / 49403.7 ms | - |
 
 | Query | Provider | Model |
 |---|---|---|
