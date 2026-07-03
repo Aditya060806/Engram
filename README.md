@@ -54,6 +54,7 @@
 - [12. API Reference](#12-api-reference)
 - [13. Comparison With Other Memory Approaches](#13-comparison-with-other-memory-approaches)
 - [14. Technical Stack](#14-technical-stack)
+  - [14.1 Performance & Latency](#141-performance--latency)
 - [15. Project Structure](#15-project-structure)
 - [16. Local Setup](#16-local-setup)
 - [17. Deployment](#17-deployment)
@@ -104,6 +105,7 @@ These are verifiable metrics drawn straight from the codebase, not marketing cla
 | Reconciliation outcomes | **3** | keep new · keep old · keep both |
 | Rate-limited sensitive routes | **6** | ingest · recall · improve · recap · ai/models · ai/config |
 | Architecture diagrams in this README | **15** | rendered Mermaid (flowchart, sequence, state, ER, charts) |
+| Latency optimization layers | **5** | pooled Cognee client · backend cache · client cache+dedupe · prewarm · async ingest ([§14.1](#141-performance--latency)) |
 
 ### Cognee lifecycle coverage vs. typical hackathon builds
 
@@ -838,6 +840,28 @@ The gap is not incremental. Engram is the only row that treats memory as a lifec
 
 **Infrastructure**
 - Frontend on **Vercel** (zero-config), backend on **Render** (`render.yaml` blueprint), production data on **PostgreSQL + PGVector**.
+
+### 14.1 Performance & Latency
+
+Engram is engineered so the parts under our control add as little latency as possible. The inherent model and graph-completion time is what it is, but the avoidable overhead around it is removed.
+
+| Layer | Optimization | Why it matters |
+|---|---|---|
+| Cognee Cloud calls | **Pooled keep-alive HTTP client** ([cognee_cloud.py](https://github.com/Aditya060806/Engram/blob/main/backend/cognee_cloud.py)) | Reuses warm connections across every recall / ingest / cognify / graph call, skipping a fresh TCP + TLS handshake (~100 to 300 ms) that the previous per-request client paid every time |
+| Backend reads | **In-memory TTL + LRU cache** ([cache.py](https://github.com/Aditya060806/Engram/blob/main/backend/cache.py)) | Graph snapshot, schema inventory, topics, and recap are cached (30 to 300 s), so repeat views are served without recomputation |
+| Frontend fetches | **Client cache + request dedupe** ([api-cache.ts](https://github.com/Aditya060806/Engram/blob/main/frontend/src/lib/api-cache.ts)) | Identical in-flight requests share one promise; cached GETs skip the network; writes invalidate only the affected keys |
+| Navigation | **Cache prewarming on app entry** ([Prewarm.tsx](https://github.com/Aditya060806/Engram/blob/main/frontend/src/components/Prewarm.tsx)) | Common data (sources, topics, conflicts) is warmed 300 ms after paint, so opening those pages renders from cache instantly |
+| Proxy | **Extended `maxDuration` + fast-fail connect timeout** | Slow-but-valid backend responses are not cut into 502s; unreachable tenants fail fast to the local fallback instead of hanging |
+| UI feel | **GSAP + Lenis transitions, route progress bar, on-load hero entrance** | Motion is smooth and continuous rather than janky, and route changes show immediate progress feedback |
+
+**Design principles behind the speed:**
+
+- **Cognee-first, fallback-fast.** Recall hits the graph first; if the tenant is unreachable, a capped connect timeout falls back to local memory rather than blocking the request.
+- **Never double-fetch.** Prewarming, client cache, and in-flight dedupe are layered so a page mounting mid-request joins the existing call instead of firing a new one.
+- **Async, non-blocking ingestion.** Ingest returns a job id immediately and builds the graph in the background; the [graph-status indicator](#106-agent-memory-over-mcp-read--write) shows progress instead of blocking the UI.
+- **Targeted invalidation.** A write only clears the cache keys it actually affects (see the invalidation map in `api-cache.ts`), so unrelated views stay warm.
+
+> These changes remove avoidable overhead (repeated handshakes, redundant round trips, layout jank). They do not, and cannot, remove the real server-side time Cognee spends on graph completion and `cognify`, which is inherent to building and querying a knowledge graph.
 
 ---
 
