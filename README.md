@@ -88,6 +88,7 @@ These are verifiable metrics drawn straight from the codebase, not marketing cla
 
 | Metric | Value | Evidence |
 |---|:---:|---|
+| Measured recall served by Cognee | **10 / 10 (100%)** | Live-tenant benchmark, [§ measured recall routing](#measured-recall-routing-live-tenant) |
 | Cognee lifecycle operations used | **4 / 4** | `remember` · `recall` · `improve` · `forget` — all load-bearing ([services/__init__.py](https://github.com/Aditya060806/Engram/blob/main/backend/services/__init__.py)) |
 | Cognee integration paths | **2** | Local SDK **and** hosted Cognee Cloud REST tenant ([cognee_cloud.py](https://github.com/Aditya060806/Engram/blob/main/backend/cognee_cloud.py)) |
 | End-to-end lifecycle test checks | **6 / 6 PASS** | [test_cognee_cloud.py](https://github.com/Aditya060806/Engram/blob/main/backend/test_cognee_cloud.py) |
@@ -122,18 +123,34 @@ xychart-beta
     bar [1, 3, 4, 9]
 ```
 
-### Where each request routes
+### Measured recall routing (live tenant)
 
-Recall is Cognee-first: the graph answers directly whenever it can, and an LLM only fills gaps.
+Recall is Cognee-first: the graph answers directly whenever it can, and an LLM only fills gaps. This is **measured**, not aspirational. Running [`benchmark_recall.py`](https://github.com/Aditya060806/Engram/blob/main/backend/benchmark_recall.py) against the live Cognee Cloud tenant on 2026-07-03 (ingest a known corpus, wait for the graph, run 10 queries, read the `provider` tag on each answer):
 
 ```mermaid
 pie showData
-    title Recall resolution (Cognee-first, LLM as fallback)
-    "Cognee graph (GRAPH_COMPLETION)" : 80
-    "LLM fallback (empty graph / miss)" : 20
+    title Measured recall resolution (10 queries, live tenant)
+    "Cognee graph (GRAPH_COMPLETION)" : 10
+    "LLM fallback" : 0
 ```
 
-> The 80/20 split illustrates the intended routing priority (graph-first). Actual ratios depend on how much has been ingested; a fully populated graph pushes nearly all recalls to Cognee.
+- **Cognee-served: 10/10 (100%)** — every answer returned `provider=cognee model=graph-completion`
+- LLM fallback: 0/10 (0%)
+
+| Query | Provider | Model |
+|---|---|---|
+| Who is the groom and when is the wedding? | cognee | graph-completion |
+| What database do we use now? | cognee | graph-completion |
+| What database did we use before? | cognee | graph-completion |
+| What changed about our deploy process? | cognee | graph-completion |
+| What does Engram use for its memory lifecycle? | cognee | graph-completion |
+| Is Stu the groom? | cognee | graph-completion |
+| When did we switch database? | cognee | graph-completion |
+| Summarize the current architecture decisions. | cognee | graph-completion |
+| What is the wedding location? | cognee | graph-completion |
+| Which memory operations does Cognee provide? | cognee | graph-completion |
+
+> Reproduce it yourself: `python backend/benchmark_recall.py --url <backend-url>`. The script writes this table to `backend/benchmark_results.md`.
 
 ---
 
