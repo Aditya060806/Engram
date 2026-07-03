@@ -96,14 +96,16 @@ These are verifiable metrics drawn straight from the codebase, not marketing cla
 | Cognee lifecycle operations used | **4 / 4** | `remember` · `recall` · `improve` · `forget` — all load-bearing ([services/__init__.py](https://github.com/Aditya060806/Engram/blob/main/backend/services/__init__.py)) |
 | Cognee integration paths | **2** | Local SDK **and** hosted Cognee Cloud REST tenant ([cognee_cloud.py](https://github.com/Aditya060806/Engram/blob/main/backend/cognee_cloud.py)) |
 | Typed ontology extraction | **5 node types + typed edges** | `graph_model` + custom prompt steer `remember()` ([§8.2](#82-schema-guided-typed-extraction)) |
+| Contradiction detection | **graph-derived** | `reconcile_from_graph()` reads `supersedes`/`contradicts` edges from Cognee ([§10.1](#101-the-reconciliation-engine)) |
 | End-to-end lifecycle test checks | **6 / 6 PASS** | [test_cognee_cloud.py](https://github.com/Aditya060806/Engram/blob/main/backend/test_cognee_cloud.py) |
+| CI checks | **ruff · eslint · build · pytest** | [.github/workflows/ci.yml](https://github.com/Aditya060806/Engram/blob/main/.github/workflows/ci.yml) |
 | Ingestion source types | **6** | pdf · github · article · youtube · conversation · text |
-| Backend API endpoints | **36** | [§12 API Reference](#12-api-reference) |
+| Backend API endpoints | **40** | [§12 API Reference](#12-api-reference) |
 | Measured warm recall latency (p50) | **~8 s** | Cognee graph-completion, live tenant ([§14.1](#141-performance--latency)) |
 | MCP tools exposed to agents | **6** | read + write: recall · graph · review · remember · improve · forget ([mcp_server.py](https://github.com/Aditya060806/Engram/blob/main/backend/mcp_server.py)) |
 | Frontend UI routes | **9** | landing · ask · graph · resolve · ingest · recap · provenance · settings · login |
-| Reusable React components | **17** | [`frontend/src/components/`](https://github.com/Aditya060806/Engram/tree/main/frontend/src/components) |
-| Lines of code | **~11.6k** | ~4.2k Python (backend) + ~7.5k TypeScript (frontend) |
+| Reusable React components | **18** | [`frontend/src/components/`](https://github.com/Aditya060806/Engram/tree/main/frontend/src/components) |
+| Lines of code | **~12.8k** | ~5.2k Python (backend) + ~7.6k TypeScript (frontend) |
 | Storage engines supported | **2** | SQLite (local) + PostgreSQL/PGVector (prod) |
 | Memory states modeled | **7** | Active · Reinforced · Contested · Superseded · Decaying · Forgotten · New |
 | Reconciliation outcomes | **3** | keep new · keep old · keep both |
@@ -613,7 +615,7 @@ The API contract is defined in [`backend/models/__init__.py`](https://github.com
 ## 10. Key Features
 
 ### 10.1 The Reconciliation Engine
-When new evidence is ingested, Engram queries existing knowledge graph schemas to identify contradictions or superseded statements. Detected conflicts are sent to the user's inbox in the UI. The user can choose to Keep New (pruning the old data), Keep Old (discarding the new claim), or Keep Both (adding the new claim as an alternative relationship).
+Reconciliation is driven by Cognee itself. The typed ontology extracts `supersedes` and `contradicts` edges into the knowledge graph, and `reconcile_from_graph()` reads those edges straight from the tenant graph (`dataset_graph`) and turns them into conflict events. So when the graph says "Supabase supersedes Postgres," that contradiction surfaces in the inbox because Cognee detected it, not because a side-channel prompt guessed it. A secondary LLM pass (`run_reconciliation`) still runs at ingest as a backstop detector. Detected conflicts are sent to the user's inbox in `/resolve`, where the user can Keep New (prune the old claim), Keep Old (discard the new claim), or Keep Both (keep them as alternatives). Resolving routes the prune back to the graph cloud-first.
 
 ```mermaid
 flowchart LR
@@ -789,6 +791,10 @@ All backend routes require the shared `X-Engram-Key` header (injected by the Ver
 | `POST` | `/ai/models` | Live model discovery for a provider | 10/min |
 | `GET` | `/ai/config` | Read current BYOK config (no secrets) | — |
 | `POST` | `/ai/config` | Save BYOK config (key encrypted at rest) | 5/min |
+| `GET` | `/chat/conversations` | List the user's saved conversations | — |
+| `GET` | `/chat/conversations/{id}` | Fetch a conversation's messages | — |
+| `POST` | `/chat/conversations` | Save/update a conversation (server-side history) | — |
+| `DELETE` | `/chat/conversations/{id}` | Delete a conversation | — |
 
 Interactive OpenAPI docs are available at `/docs` on the running backend.
 
@@ -1046,7 +1052,8 @@ flowchart LR
 | `COGNEE_SERVICE_URL` | optional | Cognee Cloud tenant base URL. |
 | `COGNEE_TENANT_ID` | optional | Cognee Cloud tenant UUID. |
 | `FRONTEND_URL` | ✅ | Allowed CORS origin. |
-| `ENVIRONMENT` | optional | `development` / `production`. |
+| `GITHUB_TOKEN` | optional | Raises GitHub API limit 60→5000/hr and enables private-repo ingestion. Public repos work without it. |
+| `ENVIRONMENT` | optional | `development` / `production` (keep `production` on deployed hosts). |
 
 ### Frontend (Vercel / local `.env.local`)
 
@@ -1075,13 +1082,15 @@ flowchart LR
 
 ## 20. Known Limitations
 
-- **Authentication Model**: Authentication via GitHub/Google OAuth is enforced for all routes except the landing page and login page. The session user ID is threaded to the backend via the `X-User-Id` header for per-user data routing.
-- **Chat History Persistence**: The chat conversation history in `/ask` is currently persisted in the browser's local storage (`localStorage`) rather than being stored on the server side.
+- **Authentication Model**: Authentication via GitHub/Google OAuth is enforced for all routes except the landing page and login page. The session user ID is threaded to the backend via the `X-User-Id` header for per-user data routing. The backend trusts that header behind a shared access key (compared in constant time). This is sufficient for the current deployment; a hardened multi-tenant setup would verify a per-user signed token (e.g. a NextAuth JWT) rather than trust the header. Tracked as post-hackathon work.
+- **Two stores, eventual consistency**: Lifecycle state (sources, conflicts, confidence, decay) lives in SQL as the system of record, while the semantic graph lives in Cognee. They are linked by a stored `cognee_data_id` per source (deterministic prune), but they are not transactionally coupled, so a failed cloud call can leave them briefly out of sync. Source-level prune is exact; claim-level prune is best-effort (see below).
+- **DB calls in async handlers**: Most metadata reads/writes run synchronously inside async request handlers (only the heaviest paths are offloaded to threads). This is fine for the current usage; under high concurrent load on Postgres it would benefit from moving the DB layer fully off the event loop.
+- **Chat History Persistence**: Conversations are now persisted **server-side** per user (`chat_conversations` table) and mirrored to `localStorage` as an offline cache, so history survives across devices and browser clears. Each answered turn is also written back into Cognee memory so it is recallable in future sessions.
 - **Database Scope**: The database configuration supports both a local SQLite file (default for local development) and a managed PostgreSQL instance with PGVector for remote Vercel/production deployment.
 - **Cognee Per-Request LLM Isolation (Upstream Issue #2228)**: LLM configuration for Cognee's own internal pipeline (`remember`/`recall`/`improve`/`forget`) is applied per-request but relies on Cognee's global process-wide config state. This is fully safe under this project's single-session usage pattern, but would require request-scoped isolation (or waiting on Cognee's roadmap for issue #2228) before being run under highly concurrent multi-tenant loads.
 - **AI Chat Import Depends on External Page Structure**: The chat-URL importer (`/import/chat-url`) scrapes undocumented page structure from ChatGPT, Claude, and Gemini public share links. These platforms may change their page layout at any time with no notice, which can break import for a specific platform. This is not a Engram bug — the feature works within the limits of what each platform's public share page exposes.
 - **Article ingestion vs. bot protection**: Article ingestion uses `trafilatura` to fetch page text. Sites with aggressive bot protection (e.g. large corporate/news domains) will refuse or time out the request. GitHub repos, PDFs, and scraper-friendly pages (blogs, Wikipedia) are the reliable paths.
-- **Decay-sweep pruning is local**: Source-delete and demo-reset trigger `forget()` on the hosted tenant; the automatic decay sweep still prunes via the local SDK/metadata store, because decayed records are keyed by summary text rather than a tenant `dataId`. Mapping those to tenant data items is a known follow-up.
+- **Decay-sweep pruning on Cloud is best-effort**: The decay sweep now routes `forget()` through the Cloud client, resolving each decayed claim to a tenant data item by name match and pruning it by `dataId` (with local SDK fallback). Because decay operates at the claim level while Cognee forgets whole data items, a claim that does not map cleanly to a single data item is logged and skipped rather than over-pruning. It no longer silently touches only the local store.
 
 ---
 
@@ -1091,18 +1100,31 @@ flowchart LR
 
 - [x] Hosted Cognee Cloud routing live in production, verified by `/` status (`recall_source: cognee-cloud`).
 - [x] Measured 100% Cognee-served recall over a 10-query live-tenant benchmark.
+- [x] Schema-guided typed extraction (`graph_model` + custom prompt) so the graph is `Fact`/`Decision`/`Topic` nodes with `supersedes`/`contradicts` edges.
+- [x] **Conversations are remembered into Cognee** — each answered turn is written back so future sessions can recall it.
+- [x] **Server-side chat history** (`chat_conversations`) with cross-device sync and `localStorage` fallback.
+- [x] Decay `forget()` routes to the Cognee Cloud tenant (best-effort `dataId`) instead of local-only.
+- [x] Cloud session guidance derived from the reconciliation log (the "Engram has noticed" panel now works in production).
+- [x] **Graph-derived reconciliation** — `reconcile_from_graph()` reads `supersedes`/`contradicts` edges from the Cognee graph and creates conflict events, so Cognee is the detector (verified live: it turned a Supabase-supersedes-Postgres edge into a conflict).
+- [x] **Deterministic prune** — sources store their Cognee `dataId` at ingest, so `forget()` prunes by exact id, not fuzzy name match.
+- [x] Per-user isolation hardening: per-user activity feed, rate-limit keyed by user, per-user session id on the chat path, constant-time access-key compare.
+- [x] Fixed the chat feedback loop so `qa_id` persists and 👍/👎 attaches on the cloud path.
+- [x] Backend unit tests wired into CI (ruff + eslint + build + pytest).
+- [x] Robust GitHub ingestion: resolves the repo's real default branch (not just main/master), strips NUL bytes that Postgres rejects, and supports private repos + higher rate limits via `GITHUB_TOKEN`.
 - [x] `GET /cognee/graph-status` endpoint + live "graph is building" indicator on ingest.
+- [x] `GET /metrics` per-endpoint response-time stats + `X-Response-Time-Ms` headers.
 - [x] Root diagnostic (`cognee_status()`) that surfaces cloud config state and any missing env vars.
+- [x] Read + write MCP tools so agents can remember/recall/improve/forget across runs.
+- [x] Keep-warm workflow to avoid free-tier cold starts.
 - [x] Free-text note ingestion (the sixth source type).
 
 **Next up**
 
-- [ ] Server-side chat history persistence (move `/ask` history off `localStorage`).
-- [ ] Map decay-sweep pruning to tenant `dataId`s so decay `forget()` runs fully on Cognee Cloud.
 - [ ] Request-scoped Cognee LLM config for safe multi-tenant concurrency (tracking upstream #2228).
 - [ ] Scheduled background decay sweeps (cron) instead of on-demand.
 - [ ] Additional ingestion connectors (Notion, Slack, Google Docs).
 - [ ] Shareable, read-only graph snapshots.
+- [ ] Optional answer streaming via an LLM grounded on Cognee retrieval (behind a toggle, since it trades away the `provider=cognee` guarantee).
 
 ---
 
