@@ -84,6 +84,36 @@ function nodeColor(node: GraphNode) {
   return COLORS.stale;
 }
 
+// Apply theme-appropriate styling to a node's material in place. On light we use
+// a solid opaque look (visible on white); on dark, the glowing glass look. This
+// lets us recolor on theme change without remounting the graph.
+function styleNodeMaterial(mat: THREE.MeshPhysicalMaterial, isLight: boolean, isFresh: boolean, color: string) {
+  mat.color.set(color);
+  if (isLight) {
+    mat.transmission = 0;
+    mat.opacity = 1;
+    mat.transparent = false;
+    mat.roughness = 0.45;
+    mat.metalness = 0.0;
+    mat.clearcoat = 0.3;
+    mat.emissive.set("#000000");
+    mat.emissiveIntensity = 0;
+  } else {
+    mat.transmission = 0.6;
+    mat.opacity = 0.9;
+    mat.transparent = true;
+    mat.roughness = 0.05;
+    mat.metalness = 0.1;
+    mat.clearcoat = 1.0;
+    mat.clearcoatRoughness = 0.02;
+    mat.thickness = 2.0;
+    mat.ior = 1.5;
+    mat.emissive.set(isFresh ? "#ffffff" : "#000000");
+    mat.emissiveIntensity = isFresh ? 0.15 : 0;
+  }
+  mat.needsUpdate = true;
+}
+
 function GraphLoadingSkeleton() {
   const nodes: { cx: number; cy: number; r: number }[] = [
     { cx: 50, cy: 30, r: 6 },
@@ -272,6 +302,11 @@ export default function GraphPage() {
   const hoveredNodeRef = useRef<any>(null);
   const selectedNodeRef = useRef<any>(null);
   const lastSelectedNodeRef = useRef<{ id: string; time: number } | null>(null);
+  // Live theme + tracked materials so we can recolor the 3D scene in place on
+  // theme change (no remount, no relayout flash).
+  const themeRef = useRef(resolvedTheme);
+  const nodeMatsRef = useRef<Map<any, { mat: THREE.MeshPhysicalMaterial; isFresh: boolean; node: any }>>(new Map());
+  const linkMatsRef = useRef<Map<any, { mat: THREE.LineBasicMaterial; link: any }>>(new Map());
   const nodeAnimationStatesRef = useRef<Map<string, { hoverProgress: number; lastTime: number }>>(new Map());
 
   // Memory Health Score: Weighted by avg node confidence (45%) & active ratio (15%), minus conflict penalties (up to -40%).
@@ -305,6 +340,23 @@ export default function GraphPage() {
 
     return nodes.filter((n) => connectedNodeIds.has(n.id) && n.id !== activeId).slice(0, 3);
   }, [selectedNode, edges, nodes]);
+
+  useEffect(() => {
+    themeRef.current = resolvedTheme;
+    // Recolor tracked node/link materials in place for the new theme. Deferred to
+    // the next frame so the theme's CSS variables are applied before we read them.
+    const id = requestAnimationFrame(() => {
+      const isLight = resolvedTheme === "light";
+      nodeMatsRef.current.forEach(({ mat, isFresh, node }) => {
+        styleNodeMaterial(mat, isLight, isFresh, nodeColor(node));
+      });
+      linkMatsRef.current.forEach(({ mat, link }) => {
+        mat.color.set(link.confidence >= 0.8 ? COLORS.particle : COLORS.edge);
+        mat.needsUpdate = true;
+      });
+    });
+    return () => cancelAnimationFrame(id);
+  }, [resolvedTheme]);
 
   useEffect(() => {
     hoveredNodeRef.current = hoveredNode;
@@ -456,44 +508,23 @@ export default function GraphPage() {
 
   const nodeThreeObject = useCallback(
     (node: any) => {
-      const isLight = resolvedTheme === "light";
+      const isLight = themeRef.current === "light";
       const color = nodeColor(node);
       const level = getConfidenceColor(node.confidenceScore);
       const isFresh = level === "fresh";
 
       const radius = node.isDecisionType ? 7 : 5;
       const geo = new THREE.SphereGeometry(radius, 32, 32);
-      // On a light canvas the glassy/transmissive material becomes invisible, so
-      // use a solid, opaque, matte material in light mode (and the glowing glass
-      // look on dark, where it reads beautifully).
-      const mat = isLight
-        ? new THREE.MeshStandardMaterial({
-            color,
-            roughness: 0.45,
-            metalness: 0.0,
-            transparent: false,
-            opacity: 1.0,
-            emissive: "#000000",
-            emissiveIntensity: 0,
-          })
-        : new THREE.MeshPhysicalMaterial({
-            color,
-            roughness: 0.05,
-            metalness: 0.1,
-            clearcoat: 1.0,
-            clearcoatRoughness: 0.02,
-            transmission: 0.6,
-            ior: 1.5,
-            thickness: 2.0,
-            opacity: 0.9,
-            transparent: true,
-            emissive: isFresh ? "#ffffff" : "#000000",
-            emissiveIntensity: isFresh ? 0.15 : 0,
-          });
+      // One mutable material for both themes, styled per theme so it can be
+      // recolored in place on theme change (see the recolor effect above).
+      const mat = new THREE.MeshPhysicalMaterial();
+      styleNodeMaterial(mat, isLight, isFresh, color);
+      nodeMatsRef.current.set(node, { mat, isFresh, node });
       const mesh = new THREE.Mesh(geo, mat);
 
       mesh.onBeforeRender = () => {
         const time = performance.now();
+        const isLightNow = themeRef.current === "light";
         const isHovered = hoveredNodeRef.current?.id === node.id;
         const isSelected = selectedNodeRef.current?.id === node.id;
 
@@ -538,7 +569,7 @@ export default function GraphPage() {
 
         // Emissive glow only reads on a dark background; on light it washes the
         // node toward white (less visible), so light mode uses scale for feedback.
-        if (!isLight) {
+        if (!isLightNow) {
           if (isFresh) {
             const baseGlow = 0.15 + 0.05 * Math.sin((time / 1000) * (Math.PI * 2 / 3));
             const targetGlow = isHovered || isSelected ? 0.6 : baseGlow;
@@ -554,7 +585,7 @@ export default function GraphPage() {
 
       return mesh;
     },
-    [resolvedTheme],
+    [],
   );
 
   const nodeCanvasObject = useCallback((node: any, ctx: CanvasRenderingContext2D, globalScale: number) => {
@@ -651,6 +682,7 @@ export default function GraphPage() {
     ];
     geo.setAttribute("position", new THREE.Float32BufferAttribute(points, 3));
     const mat = new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.4 });
+    linkMatsRef.current.set(link, { mat, link });
     return new THREE.Line(geo, mat);
   }, []);
 
@@ -751,7 +783,7 @@ export default function GraphPage() {
             {dimensions.width > 0 && dimensions.height > 0 && (
               use2d ? (
                 <ForceGraph2D
-                  key={`fg2d-${resolvedTheme}`}
+                  key="fg2d"
                   ref={fg2dRef}
                   width={dimensions.width}
                   height={dimensions.height}
@@ -784,7 +816,7 @@ export default function GraphPage() {
                   }}
                   onNodeClick={handleNodeClick}
                   onNodeHover={setHoveredNode}
-                  backgroundColor={cssVar("--color-canvas")}
+                  backgroundColor={resolvedTheme === "light" ? "#ffffff" : "#000000"}
                   nodeLabel="label"
                   d3VelocityDecay={0.3}
                   d3AlphaDecay={0.02}
@@ -793,7 +825,7 @@ export default function GraphPage() {
                 />
               ) : (
                 <ForceGraph3D
-                  key={`fg3d-${resolvedTheme}`}
+                  key="fg3d"
                   ref={fg3dRef}
                   width={dimensions.width}
                   height={dimensions.height}
@@ -809,7 +841,7 @@ export default function GraphPage() {
                   linkCurvature={0.05}
                   onNodeClick={handleNodeClick}
                   onNodeHover={setHoveredNode}
-                  backgroundColor={cssVar("--color-canvas")}
+                  backgroundColor={resolvedTheme === "light" ? "#ffffff" : "#000000"}
                   nodeLabel="label"
                   nodeResolution={24}
                   d3VelocityDecay={0.3}
