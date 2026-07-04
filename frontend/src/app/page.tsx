@@ -416,9 +416,11 @@ export default function LandingPage() {
             {/* Source types — sphere card */}
             <Reveal className="md:col-span-2">
               <div className="card-lift group relative h-full rounded-3xl border border-hairline bg-surface-card p-7 sm:p-9 overflow-hidden">
-                <div aria-hidden className="absolute -right-10 -top-6 w-72 h-72 opacity-[0.10] pointer-events-none transition-transform duration-700 group-hover:rotate-45">
-                  <Image src="/images/capabilities-sphere.webp" alt="" fill sizes="288px" className="object-contain" />
-                </div>
+                <div
+                  aria-hidden
+                  className="absolute -right-16 -top-16 w-64 h-64 rounded-full pointer-events-none blur-3xl opacity-70 transition-transform duration-700 group-hover:scale-110"
+                  style={{ background: "radial-gradient(circle, var(--color-gradient-peach), transparent 70%)" }}
+                />
                 <div className="relative">
                   <IconChip tint={T.peach}>{Ic.grid}</IconChip>
                   <h3 className="mt-5 text-lg font-semibold">Five source types, natively</h3>

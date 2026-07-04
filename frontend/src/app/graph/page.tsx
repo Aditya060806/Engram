@@ -456,26 +456,40 @@ export default function GraphPage() {
 
   const nodeThreeObject = useCallback(
     (node: any) => {
+      const isLight = resolvedTheme === "light";
       const color = nodeColor(node);
       const level = getConfidenceColor(node.confidenceScore);
       const isFresh = level === "fresh";
 
       const radius = node.isDecisionType ? 7 : 5;
       const geo = new THREE.SphereGeometry(radius, 32, 32);
-      const mat = new THREE.MeshPhysicalMaterial({
-        color,
-        roughness: 0.05,
-        metalness: 0.1,
-        clearcoat: 1.0,
-        clearcoatRoughness: 0.02,
-        transmission: 0.6,
-        ior: 1.5,
-        thickness: 2.0,
-        opacity: 0.9,
-        transparent: true,
-        emissive: isFresh ? "#ffffff" : "#000000",
-        emissiveIntensity: isFresh ? 0.15 : 0,
-      });
+      // On a light canvas the glassy/transmissive material becomes invisible, so
+      // use a solid, opaque, matte material in light mode (and the glowing glass
+      // look on dark, where it reads beautifully).
+      const mat = isLight
+        ? new THREE.MeshStandardMaterial({
+            color,
+            roughness: 0.45,
+            metalness: 0.0,
+            transparent: false,
+            opacity: 1.0,
+            emissive: "#000000",
+            emissiveIntensity: 0,
+          })
+        : new THREE.MeshPhysicalMaterial({
+            color,
+            roughness: 0.05,
+            metalness: 0.1,
+            clearcoat: 1.0,
+            clearcoatRoughness: 0.02,
+            transmission: 0.6,
+            ior: 1.5,
+            thickness: 2.0,
+            opacity: 0.9,
+            transparent: true,
+            emissive: isFresh ? "#ffffff" : "#000000",
+            emissiveIntensity: isFresh ? 0.15 : 0,
+          });
       const mesh = new THREE.Mesh(geo, mat);
 
       mesh.onBeforeRender = () => {
@@ -522,21 +536,25 @@ export default function GraphPage() {
         const finalScale = currentScale * pingScale;
         mesh.scale.set(finalScale, finalScale, finalScale);
 
-        if (isFresh) {
-          const baseGlow = 0.15 + 0.05 * Math.sin((time / 1000) * (Math.PI * 2 / 3));
-          const targetGlow = isHovered || isSelected ? 0.6 : baseGlow;
-          mat.emissiveIntensity = THREE.MathUtils.lerp(mat.emissiveIntensity, targetGlow, 0.1);
-        } else if (isHovered || isSelected) {
-          mat.emissive.set("#ffffff");
-          mat.emissiveIntensity = THREE.MathUtils.lerp(mat.emissiveIntensity, 0.5, 0.1);
-        } else {
-          mat.emissiveIntensity = THREE.MathUtils.lerp(mat.emissiveIntensity, 0, 0.1);
+        // Emissive glow only reads on a dark background; on light it washes the
+        // node toward white (less visible), so light mode uses scale for feedback.
+        if (!isLight) {
+          if (isFresh) {
+            const baseGlow = 0.15 + 0.05 * Math.sin((time / 1000) * (Math.PI * 2 / 3));
+            const targetGlow = isHovered || isSelected ? 0.6 : baseGlow;
+            mat.emissiveIntensity = THREE.MathUtils.lerp(mat.emissiveIntensity, targetGlow, 0.1);
+          } else if (isHovered || isSelected) {
+            mat.emissive.set("#ffffff");
+            mat.emissiveIntensity = THREE.MathUtils.lerp(mat.emissiveIntensity, 0.5, 0.1);
+          } else {
+            mat.emissiveIntensity = THREE.MathUtils.lerp(mat.emissiveIntensity, 0, 0.1);
+          }
         }
       };
 
       return mesh;
     },
-    [],
+    [resolvedTheme],
   );
 
   const nodeCanvasObject = useCallback((node: any, ctx: CanvasRenderingContext2D, globalScale: number) => {
