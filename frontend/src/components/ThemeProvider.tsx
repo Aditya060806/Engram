@@ -28,12 +28,31 @@ function getSystemTheme(): ResolvedTheme {
 
 function applyTheme(theme: ResolvedTheme, attribute: string) {
   const root = document.documentElement;
+
+  // Suppress the global color transitions during the swap. Animating
+  // background/border/color on every element at once causes a heavy, laggy
+  // full-page repaint; disabling transitions makes the switch instant and
+  // smooth, then we restore them on the next frame.
+  const override = document.createElement("style");
+  override.appendChild(
+    document.createTextNode(
+      "*,*::before,*::after{transition:none !important;animation:none !important}"
+    )
+  );
+  document.head.appendChild(override);
+
   root.classList.remove("light", "dark");
   root.classList.add(theme);
   if (attribute === "class") {
     root.setAttribute("data-theme", theme);
   }
   root.style.colorScheme = theme;
+
+  // Force a reflow so the style change is flushed before transitions return.
+  void window.getComputedStyle(root).opacity;
+  window.requestAnimationFrame(() => {
+    override.remove();
+  });
 }
 
 function getInitialTheme(storageKey: string, defaultTheme: Theme): Theme {
