@@ -148,11 +148,9 @@ function useUiSound() {
 
 export default function LandingPage() {
   const router = useRouter();
-  const { resolvedTheme, setTheme } = useTheme();
   const { data: session } = useSession();
   const { soundOn, toggle: toggleSound, click: sfxClick, tick: sfxTick } = useUiSound();
 
-  const [mounted, setMounted] = useState(false);
   const [entering, setEntering] = useState(false);
   const [scrolled, setScrolled] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -178,11 +176,6 @@ export default function LandingPage() {
     else document.querySelector(targetId)?.scrollIntoView({ behavior: "smooth" });
     setIsMobileMenuOpen(false);
   };
-
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setMounted(true);
-  }, []);
 
   useEffect(() => {
     async function fetchStats() {
@@ -234,7 +227,6 @@ export default function LandingPage() {
   }, []);
 
   const enter = () => { sfxClick(); setEntering(true); setTimeout(() => router.push(session ? "/graph" : "/login"), 450); };
-  const isDark = mounted && resolvedTheme === "dark";
 
   return (
     <div ref={wrapRef} className="relative min-h-screen bg-canvas text-ink font-sans overflow-x-clip selection:bg-ink/10">
@@ -258,7 +250,7 @@ export default function LandingPage() {
             ))}
             <a href="https://github.com/Aditya060806/Engram" target="_blank" rel="noreferrer" className="text-[14px] font-medium text-body hover:text-ink transition-colors">GitHub</a>
             <button onClick={toggleSound} className="p-2 rounded-lg text-muted hover:text-ink hover:bg-surface-strong transition-all cursor-pointer" title={soundOn ? "Sound on" : "Sound off"} aria-pressed={soundOn}><SoundIcon on={soundOn} /></button>
-            <button onClick={() => { sfxTick(); setTheme(resolvedTheme === "dark" ? "light" : "dark"); }} className="p-2 rounded-lg text-muted hover:text-ink hover:bg-surface-strong transition-all cursor-pointer" title={mounted ? `Switch to ${isDark ? "light" : "dark"} mode` : "Switch theme"}><ThemeIcon isDark={isDark} /></button>
+            <ThemeToggle variant="desktop" onTick={sfxTick} />
             {session ? (
               <div className="relative">
                 <button onClick={() => setShowUserMenu(!showUserMenu)} className="w-8 h-8 rounded-full bg-ink text-canvas text-[13px] font-semibold flex items-center justify-center hover:opacity-90 transition-opacity cursor-pointer" title="Account">{session.user?.name?.charAt(0) || "U"}</button>
@@ -285,7 +277,7 @@ export default function LandingPage() {
             {navLinks.map((l) => (<a key={l.id} href={l.id} onClick={(e) => handleNavClick(e, l.id)} className="text-[15px] font-medium text-body py-1">{l.label}</a>))}
             <a href="https://github.com/Aditya060806/Engram" target="_blank" rel="noreferrer" onClick={() => setIsMobileMenuOpen(false)} className="text-[15px] font-medium text-body py-1">GitHub</a>
             <button onClick={toggleSound} className="flex items-center gap-2 text-[15px] font-medium text-body py-1 cursor-pointer"><SoundIcon on={soundOn} /> {soundOn ? "Sound on" : "Sound off"}</button>
-            <button onClick={() => { sfxTick(); setTheme(resolvedTheme === "dark" ? "light" : "dark"); }} className="flex items-center gap-2 text-[15px] font-medium text-body py-1 cursor-pointer"><ThemeIcon isDark={isDark} /> {mounted ? (isDark ? "Light mode" : "Dark mode") : "Theme"}</button>
+            <ThemeToggle variant="mobile" onTick={sfxTick} />
             <button onClick={enter} className="mt-1 text-[15px] font-semibold px-4 py-2.5 rounded-full bg-ink text-canvas cursor-pointer">Open app</button>
           </div>
         )}
@@ -865,6 +857,39 @@ function SoundIcon({ on }: { on: boolean }) {
       <path d="M11 5 6 9H2v6h4l5 4V5z" />
       {on ? (<><path d="M15.54 8.46a5 5 0 0 1 0 7.07" /><path d="M19.07 4.93a10 10 0 0 1 0 14.14" /></>) : (<path d="M22 9l-6 6M16 9l6 6" />)}
     </svg>
+  );
+}
+
+// Isolated so toggling the theme re-renders only this button, not the entire
+// landing page tree. All colors are CSS-variable driven, so the page recolors
+// via the class swap without any React re-render.
+function ThemeToggle({ variant, onTick }: { variant: "desktop" | "mobile"; onTick?: () => void }) {
+  const { resolvedTheme, setTheme } = useTheme();
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setMounted(true);
+  }, []);
+  const isDark = mounted && resolvedTheme === "dark";
+  const toggle = () => {
+    onTick?.();
+    setTheme(resolvedTheme === "dark" ? "light" : "dark");
+  };
+  if (variant === "mobile") {
+    return (
+      <button onClick={toggle} className="flex items-center gap-2 text-[15px] font-medium text-body py-1 cursor-pointer">
+        <ThemeIcon isDark={isDark} /> {mounted ? (isDark ? "Light mode" : "Dark mode") : "Theme"}
+      </button>
+    );
+  }
+  return (
+    <button
+      onClick={toggle}
+      className="p-2 rounded-lg text-muted hover:text-ink hover:bg-surface-strong transition-all cursor-pointer"
+      title={mounted ? `Switch to ${isDark ? "light" : "dark"} mode` : "Switch theme"}
+    >
+      <ThemeIcon isDark={isDark} />
+    </button>
   );
 }
 
