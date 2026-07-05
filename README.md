@@ -708,6 +708,14 @@ The same lifecycle covers several of the suggested example categories:
 | **Support & Customer Memory** | Per-user isolated memory (`X-User-Id`): ingest a customer's past tickets as notes/conversations, then recall their full history. |
 | **Learning & Tutoring Tools** | The per-user graph is a personalized knowledge map; confidence doubles as a mastery signal, surfaced by `/review` and `engram_review`. |
 
+### 10.8 Resilient ingestion & grounded recall
+
+Two things quietly break most "paste a link" memory tools; Engram handles both.
+
+**Extracting JS-rendered chat shares.** Modern ChatGPT and Claude share pages no longer embed the conversation in server-rendered HTML (`__NEXT_DATA__` is gone) — the messages are streamed client-side as escaped React-Flight script data. A plain HTTP fetch therefore sees only a "log in to view" stub. Engram's `/import/chat-url` recovers the real conversation directly from that embedded script payload (`_harvest_conversation_from_html` → `harvest_natural_strings`): it isolates the conversation-bearing `<script>` block, pulls the readable natural-language strings out of the flight encoding, decodes unicode/newline escapes, and drops class-name/id/markup noise. Login-wall boilerplate is explicitly rejected (`looks_like_login_wall`) so a stub is never ingested as if it were the chat. Verified live against a real ChatGPT share link (recovered ~99k chars of the actual conversation, English and Hindi). This is inherently best-effort scraping of a JS app with no public API, so extraction may need updates if the providers change their payload format again.
+
+**Answering from what was ingested.** Recall is graph-first via Cognee, but two gaps used to swallow a valid answer. (1) A source's stored body is now matched against the question directly (`source_matches_terms`), not just its label — so a conversation imported as "ChatGPT Chat" is found when your question words only appear *inside* it, with bounded, term-centered snippets (`snippets_around_terms`) so a large chat never blows the prompt. (2) When Cognee's graph-completion returns a "don't have that info" style answer — common in the seconds after ingest while `cognify` is still building the graph — it is recognized as a refusal (`looks_like_refusal`) and recall falls through to the grounded answer instead of surfacing the refusal. These paths are covered by unit tests in [`backend/tests/test_units.py`](https://github.com/Aditya060806/Engram/blob/main/backend/tests/test_units.py).
+
 ---
 
 ## 11. The Math: Confidence, Decay, and Reconciliation
