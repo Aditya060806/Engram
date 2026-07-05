@@ -191,14 +191,34 @@ async def root():
     }
 
 
+def _memory_mb():
+    """Current resident memory in MB (dependency-free). Reads Linux
+    /proc/self/status, falling back to the resource module elsewhere."""
+    try:
+        with open("/proc/self/status") as f:
+            for line in f:
+                if line.startswith("VmRSS:"):
+                    return round(int(line.split()[1]) / 1024, 1)
+    except Exception:
+        pass
+    try:
+        import resource
+        import sys
+        rss = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+        # ru_maxrss is KB on Linux, bytes on macOS.
+        return round(rss / 1024, 1) if sys.platform != "darwin" else round(rss / (1024 * 1024), 1)
+    except Exception:
+        return None
+
+
 @app.get("/health")
 async def health():
-    return {"status": "ok", "service": "engram-cognee"}
+    return {"status": "ok", "service": "engram-cognee", "memory_mb": _memory_mb()}
 
 
 @app.get("/metrics")
 async def metrics():
-    return {"endpoints": metrics_summary()}
+    return {"memory_mb": _memory_mb(), "endpoints": metrics_summary()}
 
 
 @app.post("/ingest")
