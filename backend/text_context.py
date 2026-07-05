@@ -69,3 +69,28 @@ def source_matches_terms(label: str, url: str | None, content: str | None,
             if term in content_lc:
                 return False, True
     return False, False
+
+
+# Strong "the model has no answer" phrases. Kept broad on purpose: when Cognee's
+# graph completion emits any of these (common right after ingest, before cognify
+# finishes building the graph), recall discards it and falls through to the
+# grounded LLM fallback rather than surfacing a bare refusal as the answer.
+REFUSAL_MARKERS = (
+    "no context", "no information", "no relevant information", "no relevant data",
+    "no data available", "i don't know", "i do not know",
+    "cannot answer", "can't answer", "unable to answer", "not able to answer",
+    "not enough information", "insufficient information", "insufficient context",
+    "don't have any information", "do not have any information",
+    "don't have information", "do not have information", "don't have any data",
+    "in the provided data", "in the provided context", "in the given context",
+    "couldn't find", "could not find", "cannot find", "can't find",
+    "doesn't contain", "does not contain", "not available in the",
+)
+
+
+def looks_like_refusal(text: str) -> bool:
+    """True when an answer is really a 'no info found' response. Used to reject
+    empty graph-completion results so recall falls back to the grounded LLM."""
+    if not text:
+        return True
+    return any(m in text.lower() for m in REFUSAL_MARKERS)

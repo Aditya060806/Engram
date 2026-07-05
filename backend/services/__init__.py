@@ -77,7 +77,7 @@ from database import (  # noqa: E402
     db_save_qa_feedback,
     db_get_user_ai_config,
 )
-from text_context import snippets_around_terms, source_matches_terms  # noqa: E402
+from text_context import snippets_around_terms, source_matches_terms, looks_like_refusal  # noqa: E402
 db_init()
 
 # Cognee Activity Logger for the Live Terminal UI Feed.
@@ -1393,11 +1393,16 @@ async def answer_query(req: RecallRequest) -> ChatMessage:
                     only_context=False, search_type="GRAPH_COMPLETION",
                 )
                 cognee_answer = " ".join(t.strip() for t in completions if t and t.strip()).strip() if completions else ""
-                refusal_markers = ["no context", "no information", "i don't know", "cannot answer", "not enough information"]
-                if cognee_answer and len(cognee_answer) > 2 and not any(m in cognee_answer.lower() for m in refusal_markers):
+                if cognee_answer and len(cognee_answer) > 2 and not looks_like_refusal(cognee_answer):
                     answer = cognee_answer
                     answered_by_cognee = True
                     log_cognee_activity("recall()", f"[Cloud] Answered '{req.query[:45]}...' via graph completion")
+                elif cognee_answer:
+                    # Cognee produced a "don't have it" style answer — most often
+                    # because cognify is still building the graph for a just-added
+                    # source. Fall through to the grounded LLM (which has the stored
+                    # source body) rather than surfacing the refusal as the answer.
+                    log_cognee_activity("recall()", f"[Cloud] Graph completion had no answer for '{req.query[:45]}...'; grounding fallback")
             except Exception as cloud_err:
                 print(f"[Cognee Cloud] graph completion failed ({cloud_err})", flush=True)
 

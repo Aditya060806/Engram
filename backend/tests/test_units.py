@@ -5,7 +5,7 @@ them without installing the full backend requirements.
 """
 import metrics
 from graph_model import ENGRAM_GRAPH_MODEL, ENGRAM_DOMAIN_TYPES
-from text_context import snippets_around_terms, source_matches_terms
+from text_context import snippets_around_terms, source_matches_terms, looks_like_refusal
 
 
 def test_percentile_edges_and_interpolation():
@@ -88,3 +88,17 @@ def test_snippets_merges_overlapping_windows():
     out = snippets_around_terms(text, ["two", "seven"], window=100)
     assert out.count("…") == 0
     assert "two" in out and "seven" in out
+
+
+def test_refusal_detection_catches_dont_have_phrasing():
+    # Regression: the exact graph-completion refusal that used to be shown as a
+    # real answer (footer "via cognee") instead of falling back to the grounded LLM.
+    assert looks_like_refusal("I don't have any information about Builderly in the provided data.")
+    assert looks_like_refusal("I could not find anything about that.")
+    assert looks_like_refusal("There is no information on this topic.")
+    assert looks_like_refusal("")
+
+
+def test_refusal_detection_allows_real_answers():
+    assert not looks_like_refusal("Builderly is a no-code website builder for small businesses.")
+    assert not looks_like_refusal("You decided to migrate billing from Stripe to Paddle in Q3.")
