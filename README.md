@@ -633,6 +633,8 @@ flowchart LR
 ### 10.2 The Decay Engine
 Confidence scores of unreinforced graph nodes degrade over time (by 0.15 per sweep invocation). If a node's confidence score drops below 0.20, Engram invokes `cognee.forget()` to prune the node from the active graph store.
 
+The sweep runs **autonomously on a schedule**, not just on demand. A daily GitHub Actions cron ([`.github/workflows/maintenance.yml`](https://github.com/Aditya060806/Engram/blob/main/.github/workflows/maintenance.yml)) calls `POST /maintenance/decay-all`, which fans out across every user that owns reconcilable memory and runs the decay tick for each — so stale beliefs lose confidence and eventually forget themselves with no human in the loop. It can also be triggered manually (`POST /decay/run` for the current user, or the workflow's "Run workflow" button). The job needs a repository secret `ENGRAM_ACCESS_KEY` matching the backend's access key; if the secret is absent the run skips cleanly instead of failing.
+
 ### 10.3 Temporal Query Diffs
 Queries matching historical comparison patterns (e.g. "what changed since March?") extract diff matrices outlining added nodes, deleted nodes, changed schemas, and newly recorded decisions.
 
@@ -771,7 +773,8 @@ All backend routes require the shared `X-Engram-Key` header (injected by the Ver
 | `GET` | `/ask-questions` | Generated starter questions | — |
 | `GET` | `/reconciliation/events` | Pending + resolved conflicts | — |
 | `POST` | `/reconciliation/resolve` | Resolve a conflict (keep old/new/both) | — |
-| `POST` | `/decay/run` | Trigger a decay sweep | — |
+| `POST` | `/decay/run` | Trigger a decay sweep (current user) | — |
+| `POST` | `/maintenance/decay-all` | Autonomous decay sweep across all users (scheduled cron) | 4/min |
 | `GET` | `/decay/settings` | Read decay windows | — |
 | `POST` | `/memory/improve` | Run enrichment (memify/cognify) | 6/min |
 | `GET` | `/sources` | List ingested sources | — |

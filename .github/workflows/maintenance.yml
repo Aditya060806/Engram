@@ -1,0 +1,41 @@
+name: Autonomous memory maintenance
+
+# Engram's memory is meant to decay on its own: low-confidence, stale beliefs
+# lose confidence over time and are eventually forgotten. The /decay tick used to
+# fire only when a user clicked "run decay" in the UI. This scheduled job makes
+# the "self-maintaining memory" claim literal by sweeping every user's graph once
+# a day, with no human in the loop.
+#
+# Requires a repository secret ENGRAM_ACCESS_KEY that matches the backend's
+# ENGRAM_ACCESS_KEY env var (the access key gating the API).
+
+on:
+  schedule:
+    - cron: "0 6 * * *" # once a day at 06:00 UTC
+  workflow_dispatch: {}
+
+jobs:
+  decay:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Run autonomous decay sweep
+        env:
+          ENGRAM_ACCESS_KEY: ${{ secrets.ENGRAM_ACCESS_KEY }}
+        run: |
+          if [ -z "$ENGRAM_ACCESS_KEY" ]; then
+            echo "ENGRAM_ACCESS_KEY secret not set; skipping (add it in repo Settings > Secrets)."
+            exit 0
+          fi
+          # Wake the free-tier instance first, then run the sweep with a generous timeout.
+          curl -s -o /dev/null --max-time 60 https://engram-backend-kknh.onrender.com/health || true
+          resp=$(curl -s -w "\n%{http_code}" --max-time 120 \
+            -X POST https://engram-backend-kknh.onrender.com/maintenance/decay-all \
+            -H "X-Engram-Key: $ENGRAM_ACCESS_KEY")
+          body=$(echo "$resp" | head -n -1)
+          code=$(echo "$resp" | tail -n 1)
+          echo "HTTP $code"
+          echo "$body"
+          if [ "$code" != "200" ]; then
+            echo "Decay sweep did not return 200"
+            exit 1
+          fi

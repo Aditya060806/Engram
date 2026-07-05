@@ -40,6 +40,7 @@ from services import (
     get_conflict_events,
     resolve_conflict,
     run_decay_check,
+    run_decay_all_users,
     get_decay_settings,
     update_decay_settings,
     get_sources,
@@ -300,6 +301,14 @@ async def reconciliation_resolve(req: ResolveRequest, _auth=Depends(verify_llm_a
 async def decay_run(request: Request, _auth=Depends(verify_llm_authorization)):
     user_id = request.headers.get("X-User-Id", "")
     return await run_decay_check(user_id=user_id)
+
+
+@app.post("/maintenance/decay-all")
+@limiter.limit("4/minute")
+async def maintenance_decay_all(request: Request, _auth=Depends(verify_llm_authorization)):
+    """Autonomous decay sweep across every user. Invoked by the scheduled
+    maintenance cron so memory decays on its own, not just when a user clicks."""
+    return await run_decay_all_users()
 
 
 @app.post("/memory/improve")

@@ -649,6 +649,24 @@ def db_get_conflicts(include_resolved: bool = True, user_id: str = "") -> List[C
         for r in rows
     ]
 
+def db_get_distinct_users() -> List[str]:
+    """Return every distinct non-empty user_id that owns reconcilable memory.
+    Used by the scheduled maintenance job so decay runs for all users, not just
+    the caller. Unions conflicts + confidence_history so a user is covered even
+    if one table is empty."""
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT user_id FROM conflicts WHERE user_id != '' "
+            "UNION SELECT user_id FROM confidence_history WHERE user_id != ''"
+        )
+        rows = cursor.fetchall()
+    finally:
+        conn.close()
+    return [r["user_id"] for r in rows if r["user_id"]]
+
+
 # Reconciliation Log CRUD
 def db_save_reconciliation_log_entry(e: ReconciliationLogEntry, user_id: str = ""):
     user_id = user_id or get_current_user()

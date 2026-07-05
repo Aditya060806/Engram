@@ -66,6 +66,7 @@ from database import (  # noqa: E402
     db_save_confidence_history_entry,
     db_get_confidence_history,
     db_get_distinct_topics,
+    db_get_distinct_users,
     db_get_timeline_topics,
     db_get_decay_settings,
     db_update_decay_settings,
@@ -1905,6 +1906,39 @@ async def run_decay_check(user_id: str = "") -> DecayResult:
         ))
         
     return DecayResult(forgotten=forgotten, decayed=decayed)
+
+
+async def run_decay_all_users() -> dict:
+    """Run the decay tick for every user that owns reconcilable memory.
+
+    Called by the scheduled maintenance cron (no single user in context), so it
+    fans out per user rather than decaying only the caller's data. The current
+    user context is preserved and restored around the sweep so a foreground
+    request that happens to trigger this is not left pointing at another user.
+    """
+    saved_user = get_current_user()
+    users = db_get_distinct_users()
+    total_forgotten = 0
+    total_decayed = 0
+    processed = 0
+    try:
+        for uid in users:
+            try:
+                result = await run_decay_check(user_id=uid)
+                total_forgotten += result.forgotten
+                total_decayed += result.decayed
+                processed += 1
+            except Exception as e:
+                print(f"[Decay] sweep failed for user {uid[:8]}...: {e}", flush=True)
+    finally:
+        # Restore whatever context we started with (empty string is fine).
+        set_current_user(saved_user)
+    log_cognee_activity("decay()", f"Scheduled sweep: {processed} user(s), {total_forgotten} forgotten, {total_decayed} decayed")
+    return {
+        "users": processed,
+        "forgotten": total_forgotten,
+        "decayed": total_decayed,
+    }
 
 
 async def get_decay_settings() -> DecaySettings:
