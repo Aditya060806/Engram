@@ -77,7 +77,13 @@ from database import (  # noqa: E402
     db_save_qa_feedback,
     db_get_user_ai_config,
 )
-from text_context import snippets_around_terms, source_matches_terms, looks_like_refusal  # noqa: E402
+from text_context import (  # noqa: E402
+    snippets_around_terms,
+    source_matches_terms,
+    looks_like_refusal,
+    harvest_natural_strings,
+    looks_like_login_wall,
+)
 db_init()
 
 # Cognee Activity Logger for the Live Terminal UI Feed.
@@ -2505,6 +2511,32 @@ def _validate_url_safety(url: str) -> None:
             raise ValueError(f"Blocked request to link-local metadata IP: {ip}")
 
 
+def _harvest_conversation_from_html(html: str) -> str:
+    """Recover a conversation from embedded <script> (React Flight / RSC) data.
+
+    Modern ChatGPT/Claude share pages no longer expose __NEXT_DATA__ and render
+    the messages client-side, so a scriptless fetch only sees login boilerplate.
+    The message text is still present as escaped strings in the data script; we
+    isolate the conversation-bearing script(s) and harvest their readable text.
+    """
+    scripts = re.findall(r"<script[^>]*>(.*?)</script>", html, re.DOTALL)
+    if not scripts:
+        return ""
+    markers = ("linear_conversation", '\\"parts\\"', '\\"content_type\\"',
+               "chat_messages", '\\"author\\"', '\\"role\\"')
+    candidates = [s for s in scripts if any(mk in s for mk in markers)]
+    if not candidates:
+        candidates = [max(scripts, key=len)]
+    seen: set[str] = set()
+    out: list[str] = []
+    for sc in candidates:
+        for d in harvest_natural_strings(sc):
+            if d not in seen:
+                seen.add(d)
+                out.append(d)
+    return "\n\n".join(out)
+
+
 async def import_chat_from_url(url: str, label: str | None = None) -> dict:
     """
     Fetch and ingest a conversation from a public AI chat URL.
@@ -2608,28 +2640,31 @@ async def import_chat_from_url(url: str, label: str | None = None) -> dict:
             if lines:
                 content = "\n".join(lines)
 
-    if not content and next_payload:
-        # Generic NEXT_DATA crawl: walk for any large text fields
-        try:
-            props = next_payload.get("props", {}).get("pageProps", {})
-            text = json.dumps(props, ensure_ascii=False)
-            if len(text) > 200:
-                content = text[:50_000]
-        except (json.JSONDecodeError, TypeError):
-            pass
+    # Discard weak/boilerplate structured results so the harvesters below run.
+    if content and looks_like_login_wall(content):
+        content = ""
 
-    # Try trafilatura for clean text extraction
-    if not content or len(content) < 100:
+    # Primary fallback for JS-rendered chats (modern ChatGPT/Claude): harvest the
+    # conversation out of the embedded React-Flight script data. This is what
+    # recovers real message text when __NEXT_DATA__ is absent.
+    if not content or len(content) < 200:
+        harvested = _harvest_conversation_from_html(html)
+        if harvested and len(harvested) > len(content):
+            content = harvested
+
+    # trafilatura for article/blog-style pages (server-rendered body text).
+    if not content or len(content) < 200:
         extracted = trafilatura.extract(html, include_comments=False, include_tables=False)
-        content = extracted.strip() if extracted else ""
+        extracted = extracted.strip() if extracted else ""
+        if extracted and not looks_like_login_wall(extracted):
+            content = extracted
 
-    # Last fallback: just extract all visible text from HTML
-    if not content or len(content) < 100:
-        cleaned = re.sub(r'<[^>]+>', ' ', html)
+    # Last resort: strip scripts/styles then tags for any visible body text.
+    if not content or len(content) < 200:
+        stripped = re.sub(r'<(script|style)[^>]*>.*?</\1>', ' ', html, flags=re.DOTALL | re.IGNORECASE)
+        cleaned = re.sub(r'<[^>]+>', ' ', stripped)
         cleaned = re.sub(r'\s+', ' ', cleaned).strip()
-        # Skip pages that are clearly just login/shell pages
-        login_indicators = ["sign in", "log in", "sign up", "log in to continue"]
-        if not any(ind in cleaned.lower()[:1000] for ind in login_indicators):
+        if cleaned and not looks_like_login_wall(cleaned):
             content = cleaned[:50_000]
 
     if not content or len(content) < 100:

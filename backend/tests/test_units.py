@@ -5,7 +5,14 @@ them without installing the full backend requirements.
 """
 import metrics
 from graph_model import ENGRAM_GRAPH_MODEL, ENGRAM_DOMAIN_TYPES
-from text_context import snippets_around_terms, source_matches_terms, looks_like_refusal
+from text_context import (
+    snippets_around_terms,
+    source_matches_terms,
+    looks_like_refusal,
+    decode_flight_string,
+    harvest_natural_strings,
+    looks_like_login_wall,
+)
 
 
 def test_percentile_edges_and_interpolation():
@@ -102,3 +109,38 @@ def test_refusal_detection_catches_dont_have_phrasing():
 def test_refusal_detection_allows_real_answers():
     assert not looks_like_refusal("Builderly is a no-code website builder for small businesses.")
     assert not looks_like_refusal("You decided to migrate billing from Stripe to Paddle in Q3.")
+
+
+def test_decode_flight_string_unescapes():
+    assert decode_flight_string("Hello\\nWorld") == "Hello\nWorld"
+    assert decode_flight_string("a \\u003e b") == "a > b"
+    assert decode_flight_string('say \\"hi\\"') == 'say "hi"'
+
+
+def test_harvest_pulls_conversation_text_from_flight_payload():
+    # Mimics the escaped React-Flight payload shape modern ChatGPT emits.
+    payload = (
+        r'["stop_tokens",[387],"content_type",\"text\",\"parts\",[392],'
+        r'\"Builderly is an AI first technology studio that builds software for startups.\"'
+        r',\"another\",\"The migration to Paddle is scheduled for Q3 next year.\"'
+        r',\"className\",\"px-4 rounded-lg border-2\"'  # noise, must be dropped
+    )
+    got = harvest_natural_strings(payload)
+    joined = " ".join(got)
+    assert "Builderly is an AI first technology studio" in joined
+    assert "migration to Paddle" in joined
+    assert "rounded-lg" not in joined  # class-name noise filtered out
+
+
+def test_harvest_dedupes_and_skips_short_fragments():
+    payload = r'\"This is a long enough natural sentence to keep.\",\"This is a long enough natural sentence to keep.\",\"tiny\"'
+    got = harvest_natural_strings(payload)
+    assert got == ["This is a long enough natural sentence to keep."]
+
+
+def test_login_wall_detection():
+    assert looks_like_login_wall("Log in to get answers based on saved chats.")
+    assert looks_like_login_wall("")
+    # A full conversation that merely mentions signing up is not a login wall.
+    long_convo = "We discussed Builderly. " * 60 + "You can sign up for free later."
+    assert not looks_like_login_wall(long_convo)
