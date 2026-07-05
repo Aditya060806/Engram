@@ -73,6 +73,7 @@ from database import (  # noqa: E402
     db_get_source_content,
     db_update_source_cognee_id,
     db_get_source_cognee_id,
+    db_save_qa_feedback,
     db_get_user_ai_config,
 )
 db_init()
@@ -1590,8 +1591,10 @@ async def answer_query(req: RecallRequest) -> ChatMessage:
                     connections=connections[:4]
                 )
 
-    # Remember the chat turn in Cognee session memory and retrieve qa_id
-    qa_id_val: Optional[str] = None
+    # Remember the chat turn in Cognee memory. We mint our own qa_id (uuid) so
+    # feedback can attach without loading the heavy local SDK session store just
+    # to read one back, which was pushing the free-tier instance over its RAM cap.
+    qa_id_val: Optional[str] = "qa_" + str(uuid.uuid4())[:12]
     provider_val: Optional[str] = None
     model_val: Optional[str] = None
     try:
@@ -1602,9 +1605,6 @@ async def answer_query(req: RecallRequest) -> ChatMessage:
             answer=answer,
             context=json.dumps([s.label for s in sources_list]),
         )
-        entries = await get_session_history(session_id=_sid, last_n=1)
-        if entries:
-            qa_id_val = entries[0].get("qa_id")
         # Attribute the answer: Cognee when it answered from the graph, otherwise the fallback LLM.
         if answered_by_cognee:
             provider_val = "cognee"
@@ -1728,7 +1728,7 @@ async def get_conflict_events() -> list[ConflictEvent]:
     # Refresh graph-derived contradictions periodically (cached ~45s) so Cognee
     # itself drives the reconciliation inbox, not only the side-channel LLM pass.
     if cognee_cloud_active() and memory_cache.get(_cache_key("graph_reconcile")) is None:
-        memory_cache.set(_cache_key("graph_reconcile"), True, ttl=45)
+        memory_cache.set(_cache_key("graph_reconcile"), True, ttl=120)
         try:
             await reconcile_from_graph()
         except Exception as e:
@@ -2243,6 +2243,15 @@ async def get_session_guidance(session_id: str = "default_session") -> dict:
 
 
 async def add_session_feedback(session_id: str, qa_id: str, feedback_text: str | None = None, feedback_score: int | None = None) -> bool:
+    # Cloud-first deploy: persist feedback to the lightweight metadata table so we
+    # never load the heavy local SDK just to record a thumbs-up/down.
+    if cognee_cloud_active():
+        try:
+            await asyncio.to_thread(db_save_qa_feedback, qa_id, feedback_score, feedback_text)
+            return True
+        except Exception as e:
+            log_cognee_activity("add_feedback_error", str(e))
+            return False
     if not COGNEE_READY:
         return False
     apply_cognee_llm_config()
@@ -2291,13 +2300,13 @@ async def remember_chat_turn(session_id: str, question: str, answer: str, contex
                     run_in_background=True,
                 )
                 log_cognee_activity("remember()", f"[Cloud] Remembered conversation turn in session '{session_id}'")
-                ok = True
+                return True
             except Exception as e:
-                print(f"[Cognee Cloud] remember chat turn failed ({e}).", flush=True)
+                print(f"[Cognee Cloud] remember chat turn failed ({e}); trying local SDK.", flush=True)
 
-    # 2) Always also record in the local SDK session store. This is the source of
-    #    truth for qa_id, session history, and the 👍/👎 feedback loop, so it must
-    #    run even on the cloud path (otherwise qa_id comes back None).
+    # 2) Local SDK session store, only when Cloud is NOT the active backend.
+    #    Invoking the local pipeline is memory-heavy (embedding/cognify), so we
+    #    avoid it entirely on the cloud-first deployment.
     if COGNEE_READY:
         apply_cognee_llm_config()
         try:

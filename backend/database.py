@@ -316,6 +316,19 @@ def db_init():
     )
     """)
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_chat_conversations_user ON chat_conversations(user_id)")
+
+    # 8. Lightweight Q&A feedback (👍/👎), stored here rather than the local Cognee
+    # SDK session so the cloud-first deploy never loads the heavy pipeline for it.
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS qa_feedback (
+        qa_id TEXT NOT NULL,
+        user_id TEXT NOT NULL DEFAULT '',
+        score INTEGER,
+        feedback_text TEXT,
+        created_at TEXT NOT NULL,
+        PRIMARY KEY (qa_id, user_id)
+    )
+    """)
     
     # Insert default decay settings if not present
     cursor.execute("SELECT COUNT(*) FROM decay_settings")
@@ -960,6 +973,27 @@ def db_delete_conversation(conv_id: str, user_id: str = ""):
             "DELETE FROM chat_conversations WHERE conv_id = ? AND user_id = ?",
             (conv_id, user_id),
         )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+# ── Q&A feedback CRUD ──
+def db_save_qa_feedback(qa_id: str, score: Optional[int], feedback_text: Optional[str], user_id: str = ""):
+    from datetime import datetime, timezone
+    user_id = user_id or get_current_user()
+    now = datetime.now(timezone.utc).isoformat()
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute("""
+        INSERT INTO qa_feedback (qa_id, user_id, score, feedback_text, created_at)
+        VALUES (?, ?, ?, ?, ?)
+        ON CONFLICT(qa_id, user_id) DO UPDATE SET
+            score=excluded.score,
+            feedback_text=excluded.feedback_text,
+            created_at=excluded.created_at
+        """, (qa_id, user_id, score, feedback_text, now))
         conn.commit()
     finally:
         conn.close()
