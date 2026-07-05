@@ -77,6 +77,7 @@ from database import (  # noqa: E402
     db_save_qa_feedback,
     db_get_user_ai_config,
 )
+from text_context import snippets_around_terms, source_matches_terms  # noqa: E402
 db_init()
 
 # Cognee Activity Logger for the Live Terminal UI Feed.
@@ -1156,6 +1157,32 @@ def get_matched_topic(query: str, available_topics: list[str]) -> Optional[str]:
     return None
 
 
+def _inject_source_content(relevant_lines: list[str], s, raw: Optional[str],
+                           query_terms: list[str], matched_by_content: bool) -> None:
+    """Append a source header plus a bounded slice of its content. When the
+    match came from the body (not the label), inject snippets centered on the
+    query terms; otherwise inject a leading window."""
+    relevant_lines.append(f"- Source \"{s.label}\" ({s.type}, ingested {s.ingestedAt})")
+    if not raw:
+        return
+    body = raw.strip()
+    if len(body) <= 20:
+        return
+    MAX_WHOLE = 6000
+    if len(body) <= MAX_WHOLE:
+        relevant_lines.append(f"  Content ({len(body)} chars):")
+        relevant_lines.append(f"  {body}")
+        return
+    # Large body: prefer term-centered snippets so the answer-bearing part is
+    # actually present, then fall back to a leading window.
+    snippet = snippets_around_terms(body, query_terms) if query_terms else ""
+    if not snippet:
+        snippet = body[:MAX_WHOLE]
+    label = "Relevant excerpts" if matched_by_content else "Content"
+    relevant_lines.append(f"  {label} (from {len(body)} chars):")
+    relevant_lines.append(f"  {snippet}")
+
+
 def get_relevant_db_context(query: str, db_sources: list, db_conflicts: list) -> list[str]:
     query_terms = extract_query_terms(query)
     relevant_lines = []
@@ -1184,28 +1211,26 @@ def get_relevant_db_context(query: str, db_sources: list, db_conflicts: list) ->
             referenced_sources.add(c.newNodeSource)
 
     for s in db_sources:
-        is_relevant = s.label in referenced_sources
-        if not is_relevant:
-            for term in query_terms:
-                if term in s.label.lower() or (s.url and term in s.url.lower()):
-                    is_relevant = True
-                    break
-        if is_relevant:
-            relevant_lines.append(f"- Source \"{s.label}\" ({s.type}, ingested {s.ingestedAt})")
-            raw = db_get_source_content(s.label)
-            if raw and len(raw.strip()) > 20:
-                relevant_lines.append(f"  Content ({len(raw.strip())} chars):")
-                for i in range(0, len(raw.strip()), 4000):
-                    relevant_lines.append(f"  {raw.strip()[i:i+4000]}")
-            
+        raw = db_get_source_content(s.label)
+
+        if s.label in referenced_sources:
+            matched_by_label, matched_by_content = True, False
+        else:
+            # source_matches_terms also scans the stored body — the key fix, so a
+            # conversation labeled "ChatGPT Chat" surfaces its content when the
+            # question words only appear inside it, not in the label.
+            matched_by_label, matched_by_content = source_matches_terms(
+                s.label, s.url, raw, query_terms
+            )
+
+        if matched_by_label or matched_by_content:
+            _inject_source_content(relevant_lines, s, raw, query_terms, matched_by_content)
+
     if not relevant_lines:
         for s in db_sources[:3]:
-            relevant_lines.append(f"- Source \"{s.label}\" ({s.type}, ingested {s.ingestedAt})")
             raw = db_get_source_content(s.label)
-            if raw and len(raw.strip()) > 20:
-                snippet = raw.strip()[:4000]
-                relevant_lines.append(f"  Content: {snippet}")
-            
+            _inject_source_content(relevant_lines, s, raw, query_terms, matched_by_content=False)
+
     return relevant_lines
 
 
